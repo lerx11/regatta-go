@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ветер у марины — прогноз ветра в узлах для яхтсменов</title>
+<meta name="description" content="Живой прогноз ветра для парусных акваторий: сила в узлах, порывы, направление по румбам, волна, баллы Бофорта и чек-лист выхода на воду.">
+<meta name="theme-color" content="#04101c">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛵</text></svg>">
+<style>
+/* ============================ основа ============================ */
+:root{
+  --ink:#04101c; --ink-2:#061a2b; --sea:#0b2b41;
+  --teal:#35d1c4; --cyan:#7ae7ff; --sand:#f0d9a8; --coral:#ff8f5e; --red:#ff5d6c;
+  --text:#eaf4fb; --muted:#85a4bb; --line:rgba(122,231,255,.14);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --radius:18px;
+  --pad:clamp(20px,5vw,72px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--ink);color:var(--text);
+  font-family:var(--sans);line-height:1.6;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+img,svg{display:block;max-width:100%}
+a{color:var(--cyan);text-decoration:none}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em;line-height:1.08}
+p{margin:0}
+.wrap{width:min(1180px,100%);margin-inline:auto;padding-inline:var(--pad)}
+
+/* ============================ служебное ============================ */
+.progress{
+  position:fixed;top:0;left:0;height:2px;width:0;z-index:60;
+  background:linear-gradient(90deg,var(--teal),var(--cyan));transition:width .1s linear;
+}
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--teal);margin-bottom:18px;display:flex;align-items:center;gap:10px;
+}
+.eyebrow::before{content:"";width:26px;height:1px;background:var(--teal);opacity:.6}
+.section{padding-block:clamp(72px,12vh,140px);position:relative}
+.section + .section{border-top:1px solid var(--line)}
+.section-head{max-width:660px;margin-bottom:clamp(32px,5vw,56px)}
+.section-head h2{font-size:clamp(28px,4.4vw,46px);margin-bottom:14px}
+.section-head p{color:var(--muted);font-size:clamp(15px,1.6vw,17px)}
+
+/* появление при скролле */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.22,1,.36,1),transform .7s cubic-bezier(.22,1,.36,1)}
+.reveal.in{opacity:1;transform:none}
+
+/* ============================ навигация ============================ */
+.nav{
+  position:fixed;inset:0 0 auto;z-index:50;
+  transition:background .35s ease,backdrop-filter .35s ease,border-color .35s ease;
+  border-bottom:1px solid transparent;
+}
+.nav.solid{background:rgba(4,16,28,.78);backdrop-filter:blur(14px);border-bottom-color:var(--line)}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:68px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:.01em}
+.logo-mark{width:24px;height:24px;color:var(--teal)}
+.nav-links{display:flex;gap:26px;font-size:14px}
+.nav-links a{color:var(--muted);position:relative;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+.nav-links a::after{
+  content:"";position:absolute;left:0;right:0;bottom:-6px;height:1px;
+  background:var(--teal);transform:scaleX(0);transition:transform .25s;
+}
+.nav-links a:hover::after{transform:scaleX(1)}
+@media(max-width:720px){.nav-links{display:none}}
+
+/* ============================ герой ============================ */
+.hero{position:relative;min-height:100svh;display:grid;place-items:center;overflow:hidden;padding-top:68px}
+.sky{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(120% 80% at 20% 0%,rgba(53,209,196,.20),transparent 55%),
+    radial-gradient(90% 70% at 85% 15%,rgba(122,231,255,.14),transparent 60%),
+    radial-gradient(100% 90% at 50% 100%,rgba(255,143,94,.14),transparent 62%),
+    linear-gradient(180deg,#061c2e 0%,#04101c 62%,#020a12 100%);
+}
+.sky::after{
+  content:"";position:absolute;inset:-20%;
+  background:radial-gradient(40% 30% at 30% 40%,rgba(53,209,196,.16),transparent 70%);
+  animation:drift 22s ease-in-out infinite alternate;
+}
+@keyframes drift{from{transform:translate3d(-4%,2%,0) scale(1)}to{transform:translate3d(6%,-3%,0) scale(1.15)}}
+.stars{position:absolute;inset:0;opacity:.55;background-image:
+  radial-gradient(1px 1px at 12% 22%,#fff,transparent),
+  radial-gradient(1px 1px at 68% 12%,#cfefff,transparent),
+  radial-gradient(1px 1px at 82% 44%,#fff,transparent),
+  radial-gradient(1px 1px at 32% 62%,#bfe9ff,transparent),
+  radial-gradient(1px 1px at 52% 34%,#fff,transparent),
+  radial-gradient(1px 1px at 92% 72%,#fff,transparent);
+  animation:twinkle 6s ease-in-out infinite alternate;}
+@keyframes twinkle{from{opacity:.28}to{opacity:.7}}
+.waves{position:absolute;left:0;right:0;bottom:-2px;height:min(46vh,340px);pointer-events:none}
+.waves .layer{position:absolute;left:-10%;width:120%;bottom:0;height:100%}
+.waves .l1{animation:swell 15s ease-in-out infinite}
+.waves .l2{animation:swell 11s ease-in-out infinite reverse;opacity:.75}
+.waves .l3{animation:swell 19s ease-in-out infinite;opacity:.5}
+@keyframes swell{from{transform:translate3d(-3%,0,0)}to{transform:translate3d(3%,-8px,0)}}
+.boat{position:absolute;bottom:min(26vh,190px);left:14%;width:74px;color:var(--sand);opacity:.9;
+  animation:bob 5.5s ease-in-out infinite;filter:drop-shadow(0 14px 24px rgba(0,0,0,.5))}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-14px) rotate(2deg)}}
+
+.hero-inner{position:relative;z-index:2;text-align:center;padding-block:clamp(40px,8vh,90px)}
+.hero h1{
+  font-size:clamp(38px,8.4vw,104px);letter-spacing:-.035em;margin-bottom:22px;
+  background:linear-gradient(180deg,#fff 30%,#9fd7e8 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero h1 .ch{display:inline-block;opacity:0;transform:translateY(38px) rotate(4deg);animation:rise .8s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.hero-sub{color:#b7cfdd;font-size:clamp(15px,2vw,20px);max-width:640px;margin:0 auto 34px}
+.hero-sub b{color:var(--text);font-weight:600}
+.hero-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;padding:13px 24px;border-radius:999px;
+  font-size:15px;font-weight:560;border:1px solid var(--line);color:var(--text);
+  background:rgba(255,255,255,.03);transition:transform .25s,border-color .25s,background .25s;
+}
+.btn:hover{transform:translateY(-2px);border-color:rgba(122,231,255,.4);background:rgba(122,231,255,.08)}
+.btn.primary{background:linear-gradient(135deg,var(--teal),#22a79c);border-color:transparent;color:#04191c;font-weight:650}
+.btn.primary:hover{background:linear-gradient(135deg,#45dfd1,#28bdb0)}
+
+/* живая строка в герое */
+.hero-live{
+  position:relative;z-index:2;display:flex;flex-wrap:wrap;gap:clamp(18px,4vw,54px);
+  justify-content:center;margin-top:48px;padding:22px 30px;border:1px solid var(--line);
+  border-radius:var(--radius);background:rgba(6,26,43,.55);backdrop-filter:blur(10px);
+  width:fit-content;margin-inline:auto;
+}
+.live-item{display:flex;flex-direction:column;gap:2px;min-width:78px}
+.live-item .k{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.live-item .v{font-family:var(--mono);font-size:clamp(20px,3vw,28px);font-weight:600;letter-spacing:-.02em}
+.live-item .v small{font-size:.5em;color:var(--muted);font-weight:400;margin-left:3px}
+.scroll-cue{
+  position:relative;z-index:2;margin-top:42px;display:flex;flex-direction:column;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+}
+.scroll-cue span{width:1px;height:38px;background:linear-gradient(180deg,var(--teal),transparent);animation:cue 2s ease-in-out infinite}
+@keyframes cue{0%,100%{transform:scaleY(.35);opacity:.4}50%{transform:scaleY(1);opacity:1}}
+
+/* ============================ выбор акватории ============================ */
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:34px}
+.chip{
+  padding:10px 18px;border-radius:999px;border:1px solid var(--line);background:transparent;
+  color:var(--muted);font:inherit;font-size:14px;cursor:pointer;transition:all .22s;
+}
+.chip:hover{color:var(--text);border-color:rgba(122,231,255,.34)}
+.chip.active{background:var(--teal);border-color:var(--teal);color:#04191c;font-weight:620}
+
+/* ============================ дашборд ============================ */
+.dash{
+  display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:clamp(24px,4vw,54px);
+  align-items:center;padding:clamp(26px,4vw,48px);border:1px solid var(--line);
+  border-radius:calc(var(--radius) + 6px);background:
+    linear-gradient(180deg,rgba(11,43,65,.6),rgba(6,26,43,.35));
+}
+@media(max-width:900px){.dash{grid-template-columns:1fr;text-align:center}}
+.dial{position:relative;width:100%;max-width:320px;margin-inline:auto;aspect-ratio:1}
+.dial svg{width:100%;height:100%;overflow:visible}
+.dial-ring{fill:rgba(4,16,28,.5);stroke:var(--line);stroke-width:1.5}
+.dial-ring-inner{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:2 6}
+.tick{stroke:rgba(122,231,255,.28);stroke-width:1.5}
+.tick.major{stroke:rgba(122,231,255,.6);stroke-width:2}
+.tick-label{fill:var(--muted);font-family:var(--mono);font-size:11px;text-anchor:middle;dominant-baseline:middle}
+.needle{transform-box:view-box;transform-origin:120px 120px;transition:transform 1.1s cubic-bezier(.34,1.4,.5,1)}
+.needle-n{fill:var(--cyan)}
+.needle-s{fill:rgba(122,231,255,.22)}
+.dial-hub{fill:var(--ink);stroke:var(--teal);stroke-width:2}
+.dial-readout{
+  position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:2px;pointer-events:none;
+}
+.dial-value{font-family:var(--mono);font-size:clamp(36px,6vw,54px);font-weight:600;letter-spacing:-.04em;line-height:1}
+.dial-unit{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.dial-rumb{font-family:var(--mono);font-size:14px;color:var(--teal);margin-top:6px}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:26px}
+.metric{padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:rgba(4,16,28,.35)}
+.metric .k{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.metric .v{font-family:var(--mono);font-size:clamp(20px,2.6vw,26px);font-weight:600;letter-spacing:-.02em}
+.metric .v small{font-size:.5em;color:var(--muted);font-weight:400;margin-left:4px}
+
+.banner{
+  padding:18px 22px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(4,16,28,.4);display:flex;gap:16px;align-items:flex-start;
+  border-left-width:3px;transition:border-color .4s,background .4s;
+}
+.banner .dot{width:9px;height:9px;border-radius:50%;margin-top:8px;flex:none;background:var(--teal);box-shadow:0 0 0 5px rgba(53,209,196,.14)}
+.banner .txt strong{display:block;font-size:16px;margin-bottom:4px}
+.banner .txt span{color:var(--muted);font-size:14px}
+.status-calm{--s:#6f9ab5}   .status-ok{--s:#35d1c4}
+.status-good{--s:#7ae7ff}   .status-caution{--s:#f0d9a8}
+.status-danger{--s:#ff8f5e} .status-closed{--s:#ff5d6c}
+.banner[data-status]{border-left-color:var(--s)}
+.banner[data-status] .dot{background:var(--s);box-shadow:0 0 0 5px color-mix(in srgb,var(--s) 18%,transparent)}
+.banner[data-status] .txt strong{color:var(--s)}
+
+.muted{color:var(--muted);font-size:14px}
+.spinner{
+  width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--teal);
+  border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px;padding:28px 0}
+
+/* почасовой прогноз */
+.hours-wrap{margin-top:clamp(34px,5vw,56px)}
+.hours-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.hours{display:grid;grid-auto-flow:column;grid-auto-columns:76px;gap:8px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin}
+.hours::-webkit-scrollbar{height:6px}
+.hours::-webkit-scrollbar-thumb{background:rgba(122,231,255,.2);border-radius:99px}
+.hour{
+  display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px 10px;
+  border:1px solid var(--line);border-radius:12px;background:rgba(4,16,28,.3);
+}
+.hour .h-label{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.hour .h-bar{width:8px;border-radius:99px;background:linear-gradient(180deg,var(--cyan),var(--teal));height:0;transition:height .9s cubic-bezier(.22,1,.36,1)}
+.hour .h-bar-track{height:76px;display:flex;align-items:flex-end}
+.hour .h-val{font-family:var(--mono);font-size:13px;font-weight:600}
+.hour .h-rumb{font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+/* ============================ шкала Бофорта ============================ */
+.bf-scale{display:grid;grid-template-columns:repeat(13,1fr);gap:6px;align-items:flex-end;height:210px;margin-bottom:26px}
+@media(max-width:720px){.bf-scale{gap:3px;height:160px}}
+.bf-col{display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end;background:none;border:0;padding:6px 0;cursor:pointer;border-radius:8px;transition:background .2s}
+.bf-col:hover{background:rgba(122,231,255,.06)}
+.bf-bar{width:100%;border-radius:6px 6px 3px 3px;background:rgba(122,231,255,.16);height:0;transition:height 1s cubic-bezier(.22,1,.36,1),background .3s,box-shadow .3s}
+.bf-col[data-status]{--s:#35d1c4}
+.bf-col[data-status].active .bf-bar{background:var(--s);box-shadow:0 0 26px color-mix(in srgb,var(--s) 45%,transparent)}
+.bf-num{font-family:var(--mono);font-size:12px;color:var(--muted);transition:color .2s}
+.bf-col.active .bf-num{color:var(--text);font-weight:700}
+.bf-detail{
+  display:grid;grid-template-columns:auto 1fr;gap:clamp(18px,3vw,34px);align-items:center;
+  padding:clamp(20px,3vw,32px);border:1px solid var(--line);border-radius:var(--radius);
+  background:rgba(6,26,43,.4);
+}
+@media(max-width:720px){.bf-detail{grid-template-columns:1fr}}
+.bf-badge{
+  font-family:var(--mono);font-size:clamp(40px,7vw,64px);font-weight:600;line-height:1;
+  letter-spacing:-.05em;color:var(--s,#35d1c4);min-width:2ch;text-align:center;
+}
+.bf-info h3{font-size:clamp(18px,2.4vw,24px);margin-bottom:6px}
+.bf-info h3 span{color:var(--muted);font-weight:400;font-size:.7em;font-family:var(--mono);margin-left:8px}
+.bf-info p{color:var(--muted);font-size:14.5px;margin-bottom:4px}
+.bf-info .adv{color:var(--text)}
+
+/* ============================ чек-лист ============================ */
+.checklist{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.check-item{
+  display:flex;gap:14px;align-items:flex-start;padding:18px 20px;border:1px solid var(--line);
+  border-radius:14px;background:rgba(6,26,43,.35);transition:transform .3s,border-color .3s,background .3s;
+}
+.check-item:hover{transform:translateY(-3px);border-color:rgba(122,231,255,.3);background:rgba(11,43,65,.45)}
+.check-item .box{
+  flex:none;width:20px;height:20px;border-radius:6px;border:1.5px solid var(--teal);
+  display:grid;place-items:center;margin-top:2px;
+}
+.check-item .box svg{width:12px;height:12px;color:var(--teal)}
+.check-item span{font-size:14.5px}
+
+/* ============================ акватории ============================ */
+.spot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.spot-card{
+  text-align:left;padding:22px;border:1px solid var(--line);border-radius:var(--radius);
+  background:linear-gradient(180deg,rgba(11,43,65,.45),rgba(6,26,43,.3));color:inherit;font:inherit;
+  cursor:pointer;transition:transform .3s,border-color .3s;
+}
+.spot-card:hover{transform:translateY(-4px);border-color:rgba(122,231,255,.34)}
+.spot-card h3{font-size:19px;margin-bottom:6px}
+.spot-card .region{color:var(--muted);font-size:13.5px;margin-bottom:16px}
+.spot-card .coords{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.02em}
+.spot-card .tag{
+  display:inline-block;margin-top:14px;padding:4px 10px;border-radius:99px;font-family:var(--mono);
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--line);color:var(--muted);
+}
+.spot-card .tag.sea{color:var(--cyan);border-color:rgba(122,231,255,.3)}
+
+/* ============================ API ============================ */
+.api-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,40px);align-items:start}
+@media(max-width:900px){.api-grid{grid-template-columns:1fr}}
+.endpoint{display:flex;gap:14px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.endpoint:last-child{border-bottom:0}
+.endpoint code{
+  font-family:var(--mono);font-size:13px;color:var(--cyan);background:rgba(122,231,255,.07);
+  padding:3px 9px;border-radius:7px;white-space:nowrap;
+}
+.endpoint .m{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#04191c;background:var(--teal);padding:3px 8px;border-radius:6px}
+.endpoint p{color:var(--muted);font-size:13.5px;flex:1;min-width:180px}
+pre{
+  margin:0;padding:22px;border:1px solid var(--line);border-radius:var(--radius);
+  background:rgba(2,10,18,.75);overflow-x:auto;
+  font-family:var(--mono);font-size:12.5px;line-height:1.75;color:#c9e6f2;
+}
+pre .c{color:var(--muted)} pre .k{color:var(--cyan)} pre .s{color:var(--sand)} pre .n{color:var(--coral)}
+
+/* ============================ подвал ============================ */
+footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);font-size:13.5px}
+.foot-inner{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+.foot-inner a{color:var(--muted)}
+.foot-inner a:hover{color:var(--cyan)}
+
+/* ============================ доступность ============================ */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top">
+      <svg class="logo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v15"/><path d="M12 4l7 9h-7z" fill="currentColor" stroke="none" opacity=".9"/>
+        <path d="M12 9l-6 7h6z" fill="currentColor" stroke="none" opacity=".45"/>
+        <path d="M3 20c2 0 2.5-1.2 4.5-1.2S10 20 12 20s2.5-1.2 4.5-1.2S19 20 21 20"/>
+      </svg>
+      <span>Ветер у марины</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#forecast">Прогноз</a>
+      <a href="#beaufort">Шкала Бофорта</a>
+      <a href="#checklist">Чек-лист</a>
+      <a href="#spots">Акватории</a>
+      <a href="#api">API</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ======================= ГЕРОЙ ======================= -->
+  <section class="hero">
+    <div class="sky"></div>
+    <div class="stars"></div>
+
+    <svg class="boat" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+      <path d="M30 6v34" stroke-linecap="round"/>
+      <path d="M31 8l18 24H31z" fill="currentColor" opacity=".85"/>
+      <path d="M29 14L13 32h16z" fill="currentColor" opacity=".45"/>
+      <path d="M8 42h48l-8 12H16z" fill="currentColor" opacity=".8"/>
+    </svg>
+
+    <svg class="waves" viewBox="0 0 1440 320" preserveAspectRatio="none">
+      <path class="layer l3" fill="#062338" d="M0,224 C240,288 480,160 720,208 C960,256 1200,160 1440,208 L1440,320 L0,320 Z"/>
+      <path class="layer l2" fill="#0a3450" d="M0,256 C240,192 480,304 720,256 C960,208 1200,288 1440,240 L1440,320 L0,320 Z"/>
+      <path class="layer l1" fill="#0d4568" d="M0,288 C240,240 480,320 720,288 C960,256 1200,320 1440,288 L1440,320 L0,320 Z"/>
+    </svg>
+
+    <div class="wrap hero-inner">
+      <div class="eyebrow" style="justify-content:center">Go · net/http · Open-Meteo · без API-ключей</div>
+      <h1 id="heroTitle">Ветер у марины</h1>
+      <p class="hero-sub">
+        Живой прогноз для парусных акваторий: сила ветра <b>в узлах</b>, порывы,
+        направление по румбам, высота волны и <b>чек-лист выхода на воду</b> под конкретную погоду.
+      </p>
+      <div class="hero-actions">
+        <a class="btn primary" href="#forecast">Смотреть прогноз</a>
+        <a class="btn" href="#api">Документация API</a>
+      </div>
+
+      <div class="hero-live" id="heroLive">
+        <div class="live-item"><span class="k">Сейчас</span><span class="v" data-live="wind">—<small>уз</small></span></div>
+        <div class="live-item"><span class="k">Порывы</span><span class="v" data-live="gust">—<small>уз</small></span></div>
+        <div class="live-item"><span class="k">Направление</span><span class="v" data-live="rumb">—</span></div>
+        <div class="live-item"><span class="k">Бофорт</span><span class="v" data-live="beaufort">—</span></div>
+        <div class="live-item"><span class="k">Акватория</span><span class="v" data-live="spot" style="font-size:15px;font-family:var(--sans)">—</span></div>
+      </div>
+
+      <div class="scroll-cue"><span></span>листайте</div>
+    </div>
+  </section>
+
+  <!-- ======================= ПРОГНОЗ ======================= -->
+  <section class="section" id="forecast">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">Прогноз на 24 часа</div>
+        <h2>Сегодня на воде</h2>
+        <p>Данные приходят с Open-Meteo: скорость сразу в узлах, направление — откуда дует ветер. Выберите акваторию.</p>
+      </div>
+
+      <div class="chips reveal" id="chips"></div>
+
+      <div class="dash reveal">
+        <div class="dial">
+          <svg viewBox="0 0 240 240" role="img" aria-label="Компас направления ветра">
+            <circle class="dial-ring" cx="120" cy="120" r="112"/>
+            <circle class="dial-ring-inner" cx="120" cy="120" r="88"/>
+            <g id="ticks"></g>
+            <g class="needle" id="needle">
+              <polygon class="needle-n" points="120,34 129,120 120,132 111,120"/>
+              <polygon class="needle-s" points="120,206 129,120 120,108 111,120"/>
+            </g>
+            <circle class="dial-hub" cx="120" cy="120" r="7"/>
+          </svg>
+          <div class="dial-readout">
+            <span class="dial-value" id="dialValue">—</span>
+            <span class="dial-unit">узлов</span>
+            <span class="dial-rumb" id="dialRumb">нет данных</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="metrics" id="metrics"></div>
+          <div class="banner" id="banner">
+            <span class="dot"></span>
+            <div class="txt">
+              <strong id="bannerTitle">Загружаем прогноз…</strong>
+              <span id="bannerText">Тянем свежие данные с Open-Meteo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hours-wrap reveal">
+        <div class="hours-head">
+          <h3 style="font-size:18px">По часам</h3>
+          <span class="muted" id="hoursMeta"></span>
+        </div>
+        <div class="hours" id="hours"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= БОФОРТ ======================= -->
+  <section class="section" id="beaufort">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">Шкала Бофорта</div>
+        <h2>Сколько это в баллах</h2>
+        <p>Узлы переводятся в баллы, а баллы — в понятный вердикт: что ставить с парусами и кому можно на воду. Нажмите на столбец.</p>
+      </div>
+
+      <div class="bf-scale reveal" id="bfScale"></div>
+
+      <div class="bf-detail reveal" id="bfDetail">
+        <div class="bf-badge" id="bfBadge">—</div>
+        <div class="bf-info">
+          <h3 id="bfName">Выберите балл<span id="bfRange"></span></h3>
+          <p id="bfSea">—</p>
+          <p class="adv" id="bfAdvice">—</p>
+          <p id="bfLevel" style="margin-top:8px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= ЧЕК-ЛИСТ ======================= -->
+  <section class="section" id="checklist">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">Перед выходом</div>
+        <h2>Чек-лист экипажа</h2>
+        <p>Список собирается автоматически под текущую силу ветра — от базового набора до штормового.</p>
+      </div>
+      <div class="checklist" id="checklist"></div>
+    </div>
+  </section>
+
+  <!-- ======================= АКВАТОРИИ ======================= -->
+  <section class="section" id="spots">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">Акватории</div>
+        <h2>Где ходим</h2>
+        <p>Список координат лежит в одном файле и правится за минуту. Для морских точек дополнительно тянем высоту волны.</p>
+      </div>
+      <div class="spot-grid reveal" id="spotGrid"></div>
+    </div>
+  </section>
+
+  <!-- ======================= API ======================= -->
+  <section class="section" id="api">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">REST API</div>
+        <h2>Чистый JSON на stdlib</h2>
+        <p>Никаких внешних зависимостей: маршрутизация на нативном <code>http.ServeMux</code> с паттернами Go 1.22, ответы кешируются на 10 минут.</p>
+      </div>
+
+      <div class="api-grid reveal">
+        <div>
+          <div class="endpoint"><span class="m">GET</span><code>/api/forecast?spot=strogino</code><p>Полный прогноз по акватории: текущий ветер, 24 часа по часам, чек-лист.</p></div>
+          <div class="endpoint"><span class="m">GET</span><code>/api/spots</code><p>Справочник акваторий с координатами и признаком «море».</p></div>
+          <div class="endpoint"><span class="m">GET</span><code>/api/scale</code><p>Шкала Бофорта целиком: баллы, диапазоны, состояние воды, рекомендации.</p></div>
+          <div class="endpoint"><span class="m">GET</span><code>/api/health</code><p>Проверка живости сервиса.</p></div>
+        </div>
+        <pre id="curl"><span class="c"># прогноз ветра для Строгино</span>
+<span class="k">curl</span> <span class="s">"…/api/forecast?spot=strogino"</span>
+
+{
+  <span class="k">"spot"</span>: { <span class="k">"name"</span>: <span class="s">"Строгино"</span>, <span class="k">"region"</span>: <span class="s">"Москва, Россия"</span> },
+  <span class="k">"current"</span>: {
+    <span class="k">"wind_knots"</span>: <span class="n">12.4</span>,
+    <span class="k">"gust_knots"</span>: <span class="n">18.1</span>,
+    <span class="k">"rumb"</span>: <span class="s">"ЮЗ"</span>,
+    <span class="k">"beaufort"</span>: <span class="n">4</span>,
+    <span class="k">"beaufort_name"</span>: <span class="s">"Умеренный"</span>,
+    <span class="k">"sea_state"</span>: <span class="s">"Короткие волны, много барашков"</span>,
+    <span class="k">"sail_advice"</span>: <span class="s">"Рабочий ветер — полные паруса…"</span>,
+    <span class="k">"status"</span>: <span class="s">"good"</span>
+  },
+  <span class="k">"hours"</span>: [ <span class="c">/* 24 точки */</span> ],
+  <span class="k">"checklist"</span>: [ <span class="s">"Спасжилеты по числу экипажа…"</span> ]
+}</pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span>Ветер у марины — пет-проект на Go. Данные: Open-Meteo (бесплатно, без ключей).</span>
+    <span><a href="#top">Наверх ↑</a></span>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+/* ======================= состояние ======================= */
+const state = { spot:"strogino", spots:[], scale:[], forecast:null };
+
+const STATUS_COLORS = {
+  calm:"#6f9ab5", ok:"#35d1c4", good:"#7ae7ff",
+  caution:"#f0d9a8", danger:"#ff8f5e", closed:"#ff5d6c"
+};
+const $  = (sel)=>document.querySelector(sel);
+const $$ = (sel)=>Array.from(document.querySelectorAll(sel));
+
+/* ======================= сеть ======================= */
+async function getJSON(url){
+  const res = await fetch(url, { headers:{ accept:"application/json" } });
+  const data = await res.json().catch(()=>null);
+  if(!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+  return data;
+}
+
+/* ======================= заголовок героя ======================= */
+function animateTitle(){
+  const el = $("#heroTitle");
+  const text = el.textContent.trim();
+  el.textContent = "";
+  [...text].forEach((ch,i)=>{
+    const span = document.createElement("span");
+    span.className = "ch";
+    span.textContent = ch === " " ? "\u00A0" : ch;
+    span.style.animationDelay = (i*45+250) + "ms";
+    el.appendChild(span);
+  });
+}
+
+/* ======================= компас ======================= */
+const CARDINALS = {0:"С",90:"В",180:"Ю",270:"З"};
+
+function buildTicks(){
+  const g = $("#ticks");
+  for(let i=0;i<16;i++){
+    const deg = i*22.5, rad = (deg-90)*Math.PI/180;
+    const major = deg % 90 === 0;
+    const r1 = major ? 92 : 98, r2 = 106;
+    const x1 = 120 + r1*Math.cos(rad), y1 = 120 + r1*Math.sin(rad);
+    const x2 = 120 + r2*Math.cos(rad), y2 = 120 + r2*Math.sin(rad);
+    const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1",x1.toFixed(1)); line.setAttribute("y1",y1.toFixed(1));
+    line.setAttribute("x2",x2.toFixed(1)); line.setAttribute("y2",y2.toFixed(1));
+    line.setAttribute("class","tick" + (major ? " major" : ""));
+    g.appendChild(line);
+
+    if(major){
+      const tx = 120 + 76*Math.cos(rad), ty = 120 + 76*Math.sin(rad);
+      const label = document.createElementNS("http://www.w3.org/2000/svg","text");
+      label.setAttribute("x",tx.toFixed(1)); label.setAttribute("y",ty.toFixed(1));
+      label.setAttribute("class","tick-label");
+      label.textContent = CARDINALS[deg];
+      g.appendChild(label);
+    }
+  }
+}
+
+/* ======================= анимация чисел ======================= */
+function countUp(el, target, decimals, suffix){
+  const dur = 800, start = performance.now();
+  function frame(now){
+    const p = Math.min(1,(now-start)/dur);
+    const eased = 1 - Math.pow(1-p,3);
+    el.innerHTML = (target*eased).toFixed(decimals) + (suffix ? "<small>"+suffix+"</small>" : "");
+    if(p<1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ======================= рендер: чипы и карточки ======================= */
+function renderChips(){
+  const box = $("#chips");
+  box.innerHTML = "";
+  state.spots.forEach(sp=>{
+    const b = document.createElement("button");
+    b.className = "chip" + (sp.slug === state.spot ? " active" : "");
+    b.type = "button";
+    b.textContent = sp.name;
+    b.addEventListener("click", ()=>selectSpot(sp.slug));
+    box.appendChild(b);
+  });
+}
+
+function renderSpotCards(){
+  const box = $("#spotGrid");
+  box.innerHTML = "";
+  state.spots.forEach(sp=>{
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "spot-card";
+    card.innerHTML =
+      '<h3></h3><div class="region"></div>' +
+      '<div class="coords"></div>' +
+      '<span class="tag' + (sp.coastal ? " sea" : "") + '"></span>';
+    card.querySelector("h3").textContent = sp.name;
+    card.querySelector(".region").textContent = sp.region;
+    card.querySelector(".coords").textContent = sp.lat.toFixed(3) + "° N, " + sp.lon.toFixed(3) + "° E";
+    const tag = card.querySelector(".tag");
+    tag.textContent = sp.coastal ? "море · учитываем волну" : "внутренние воды";
+    card.addEventListener("click", ()=>{
+      selectSpot(sp.slug);
+      $("#forecast").scrollIntoView({ behavior:"smooth", block:"start" });
+    });
+    box.appendChild(card);
+  });
+}
+
+/* ======================= рендер: шкала Бофорта ======================= */
+function renderScale(){
+  const box = $("#bfScale");
+  box.innerHTML = "";
+  state.scale.forEach(step=>{
+    const col = document.createElement("button");
+    col.type = "button";
+    col.className = "bf-col";
+    col.dataset.scale = step.scale;
+    col.dataset.status = step.status;
+    col.style.setProperty("--s", STATUS_COLORS[step.status] || "#35d1c4");
+    col.title = step.scale + " балл — " + step.name;
+
+    const bar = document.createElement("div");
+    bar.className = "bf-bar";
+    const num = document.createElement("span");
+    num.className = "bf-num";
+    num.textContent = step.scale;
+
+    col.appendChild(bar);
+    col.appendChild(num);
+    col.addEventListener("click", ()=>showScaleStep(step.scale));
+    box.appendChild(col);
+  });
+  requestAnimationFrame(()=>{
+    $$(".bf-col").forEach(col=>{
+      const step = state.scale[Number(col.dataset.scale)];
+      const ratio = Math.min(1, step.upper_knots / 64);
+      col.querySelector(".bf-bar").style.height = Math.max(10, ratio*100) + "%";
+    });
+  });
+}
+
+function showScaleStep(scale){
+  const step = state.scale[scale];
+  if(!step) return;
+  const color = STATUS_COLORS[step.status] || "#35d1c4";
+  const detail = $("#bfDetail");
+  detail.style.setProperty("--s", color);
+  $("#bfBadge").textContent  = step.scale + " б.";
+  $("#bfName").textContent   = step.name;
+  $("#bfRange").textContent  = step.range + " уз";
+  $("#bfSea").textContent    = step.sea_state;
+  $("#bfAdvice").textContent = step.sail_advice;
+  $("#bfLevel").textContent  = "допуск: " + step.sailor_level;
+  $("#bfLevel").style.color  = color;
+  $$(".bf-col").forEach(c=>c.classList.toggle("active", Number(c.dataset.scale) === scale));
+}
+
+/* ======================= рендер: прогноз ======================= */
+function metric(label, valueHTML){
+  return '<div class="metric"><span class="k">' + label + '</span><span class="v">' + valueHTML + '</span></div>';
+}
+
+function renderForecast(data){
+  const cur = data.current;
+  const color = STATUS_COLORS[cur.status] || "#35d1c4";
+
+  // компас
+  $("#needle").style.transform = "rotate(" + cur.direction_deg + "deg)";
+  $("#dialValue").textContent = Math.round(cur.wind_knots);
+  $("#dialRumb").textContent  = cur.rumb + " · " + cur.rumb_full;
+
+  // метрики
+  $("#metrics").innerHTML = [
+    metric("Порывы",      cur.gust_knots.toFixed(1) + "<small>уз</small>"),
+    metric("В м/с",       cur.wind_ms.toFixed(1) + "<small>м/с</small>"),
+    metric("Бофорт",      cur.beaufort + " <small>" + cur.beaufort_name.toLowerCase() + "</small>"),
+    metric("Волна",       cur.wave_m != null
+        ? cur.wave_m.toFixed(1) + "<small>м · " + (cur.wave_rumb || "—") + "</small>"
+        : "— <small>нет данных</small>"),
+  ].join("");
+
+  // вердикт
+  const banner = $("#banner");
+  banner.dataset.status = cur.status;
+  $("#bannerTitle").style.color = color;
+  $("#bannerTitle").textContent = cur.beaufort_name + " ветер, " + Math.round(cur.wind_knots) + " узлов";
+  $("#bannerText").innerHTML = cur.sail_advice + " · " + cur.sea_state + " · допуск: " + cur.sailor_level;
+
+  // часы
+  const maxKn = Math.max(6, ...data.hours.map(h=>h.gust_knots));
+  const hours = $("#hours");
+  hours.innerHTML = data.hours.map(h=>{
+    const height = Math.max(6, (h.wind_knots / maxKn) * 100);
+    return '<div class="hour">' +
+      '<span class="h-label">' + h.label + '</span>' +
+      '<div class="h-bar-track"><div class="h-bar" style="--h:' + height + '%"></div></div>' +
+      '<span class="h-val">' + Math.round(h.wind_knots) + '</span>' +
+      '<span class="h-rumb">' + h.rumb + '</span>' +
+      '</div>';
+  }).join("");
+  requestAnimationFrame(()=>{
+    $$(".h-bar").forEach((bar,i)=>{
+      setTimeout(()=>{ bar.style.height = bar.style.getPropertyValue("--h"); }, i*28);
+    });
+  });
+  $("#hoursMeta").textContent = "часовой пояс " + data.timezone + " · обновлено " + data.current.time;
+
+  // чек-лист
+  $("#checklist").innerHTML = data.checklist.map(item=>
+    '<div class="check-item"><span class="box">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' +
+    '</span><span>' + item + '</span></div>'
+  ).join("");
+  revealObserve();
+
+  // герой
+  const hero = {
+    wind:      Math.round(cur.wind_knots) + "<small>уз</small>",
+    gust:      Math.round(cur.gust_knots) + "<small>уз</small>",
+    rumb:      cur.rumb,
+    beaufort:  cur.beaufort + " <small>" + cur.beaufort_name.toLowerCase() + "</small>",
+    spot:      data.spot.name
+  };
+  Object.entries(hero).forEach(([key,val])=>{
+    const el = document.querySelector('[data-live="' + key + '"]');
+    if(el) el.innerHTML = val;
+  });
+
+  showScaleStep(cur.beaufort);
+  highlightChips();
+}
+
+function highlightChips(){
+  $$("#chips .chip").forEach((chip,i)=>{
+    chip.classList.toggle("active", state.spots[i] && state.spots[i].slug === state.spot);
+  });
+}
+
+function showLoading(){
+  $("#banner").dataset.status = "ok";
+  $("#bannerTitle").textContent = "Загружаем прогноз…";
+  $("#bannerText").textContent = "Тянем свежие данные с Open-Meteo";
+  $("#checklist").innerHTML = '<div class="loading"><span class="spinner"></span>собираем чек-лист</div>';
+}
+
+function showError(message){
+  const banner = $("#banner");
+  banner.dataset.status = "closed";
+  $("#bannerTitle").textContent = "Не удалось получить прогноз";
+  $("#bannerText").textContent = message;
+}
+
+/* ======================= сценарии ======================= */
+async function selectSpot(slug){
+  state.spot = slug;
+  highlightChips();
+  showLoading();
+  try{
+    const data = await getJSON("/api/forecast?spot=" + encodeURIComponent(slug));
+    state.forecast = data;
+    renderForecast(data);
+  }catch(err){
+    showError(err.message);
+  }
+}
+
+/* ======================= скролл-эффекты ======================= */
+let revealObserver;
+function revealObserve(){
+  if(!revealObserver){
+    revealObserver = new IntersectionObserver((entries, obs)=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){ entry.target.classList.add("in"); obs.unobserve(entry.target); }
+      });
+    }, { threshold:.12, rootMargin:"0px 0px -8% 0px" });
+  }
+  $$(".reveal:not(.in)").forEach(el=>revealObserver.observe(el));
+}
+
+function onScroll(){
+  const doc = document.documentElement;
+  const max = doc.scrollHeight - doc.clientHeight;
+  $("#progress").style.width = (max > 0 ? (doc.scrollTop / max) * 100 : 0) + "%";
+  $("#nav").classList.toggle("solid", doc.scrollTop > 40);
+
+  const boat = document.querySelector(".boat");
+  if(boat && doc.scrollTop < window.innerHeight){
+    boat.style.transform = "translateY(" + (doc.scrollTop * -0.12) + "px)";
+  }
+}
+
+/* ======================= старт ======================= */
+async function init(){
+  animateTitle();
+  buildTicks();
+  revealObserve();
+  document.addEventListener("scroll", onScroll, { passive:true });
+  onScroll();
+
+  try{
+    const [spotsRes, scaleRes] = await Promise.all([
+      getJSON("/api/spots"),
+      getJSON("/api/scale"),
+    ]);
+    state.spots = spotsRes.spots;
+    state.scale = scaleRes.scale;
+    renderChips();
+    renderSpotCards();
+    renderScale();
+    showScaleStep(4);
+  }catch(err){
+    console.error("справочники не загрузились:", err);
+  }
+
+  await selectSpot(state.spot);
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

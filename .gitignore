@@ -1,0 +1,24 @@
+# секреты и окружение
+.env
+.env.*
+*.pem
+*.key
+
+# временные файлы
+*.tmp
+.screenshots/
+
+# сборка
+/bin/
+/marina-wind
+*.exe
+
+# тесты
+*.test
+*.out
+
+# Vercel
+.vercel
+
+# macOS
+.DS_Store
