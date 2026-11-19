@@ -18,8 +18,8 @@
 Публичного стенда пока нет — сервис запускается локально (см. ниже).
 После деплоя на Vercel адреса будут такими:
 
-- Landing: `https://<ваш-проект>.vercel.app/`
-- API: `https://<ваш-проект>.vercel.app/api/forecast?spot=strogino`
+- Landing: 
+- API: 
 
 ## Быстрый старт
 
