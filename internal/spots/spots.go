@@ -28,6 +28,8 @@ var Catalog = []Spot{
 	{Slug: "sevastopol", Name: "Севастополь", Region: "Чёрное море, Россия", Lat: 44.6100, Lon: 33.5200, Coastal: true},
 	{Slug: "kazan", Name: "Казань", Region: "Волга, Россия", Lat: 55.7600, Lon: 49.0900},
 	{Slug: "vladivostok", Name: "Владивосток", Region: "Японское море, Россия", Lat: 43.1000, Lon: 131.8600, Coastal: true},
+	{Slug: "perm", Name: "Пермь", Region: "Камское водохранилище, Россия", Lat: 58.0800, Lon: 56.3300},
+	{Slug: "ekaterinburg", Name: "Екатеринбург", Region: "Верх-Исетский пруд, Россия", Lat: 56.8400, Lon: 60.5650},
 	{Slug: "marmaris", Name: "Мармарис", Region: "Эгейское море, Турция", Lat: 36.8500, Lon: 28.2700, Coastal: true},
 	{Slug: "limassol", Name: "Лимассол", Region: "Средиземное море, Кипр", Lat: 34.7000, Lon: 33.0300, Coastal: true},
 }
