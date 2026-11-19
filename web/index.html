@@ -69,7 +69,26 @@ p{margin:0}
   background:var(--teal);transform:scaleX(0);transition:transform .25s;
 }
 .nav-links a:hover::after{transform:scaleX(1)}
-@media(max-width:720px){.nav-links{display:none}}
+.nav-burger{
+  display:none;width:42px;height:42px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(4,16,28,.35);align-items:center;justify-content:center;flex-direction:column;gap:5px;cursor:pointer;
+}
+.nav-burger span{display:block;width:18px;height:2px;border-radius:2px;background:var(--text);transition:transform .25s,opacity .2s}
+.nav-burger[aria-expanded="true"] span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.nav-burger[aria-expanded="true"] span:nth-child(2){opacity:0}
+.nav-burger[aria-expanded="true"] span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+@media(max-width:720px){
+  .nav-burger{display:flex}
+  .nav-links{
+    position:fixed;top:76px;left:12px;right:12px;flex-direction:column;gap:2px;padding:8px;
+    background:rgba(4,16,28,.97);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 18px 40px rgba(0,0,0,.45);
+    opacity:0;transform:translateY(-8px);pointer-events:none;transition:opacity .2s,transform .2s;
+  }
+  .nav-links.open{opacity:1;transform:none;pointer-events:auto}
+  .nav-links a{padding:12px 14px;border-radius:10px;font-size:15px}
+  .nav-links a::after{display:none}
+}
 
 /* ============================ герой ============================ */
 .hero{position:relative;min-height:100svh;display:grid;place-items:center;overflow:hidden;padding-top:68px}
@@ -108,10 +127,14 @@ p{margin:0}
 
 .hero-inner{position:relative;z-index:2;text-align:center;padding-block:clamp(40px,8vh,90px)}
 .hero h1{
-  font-size:clamp(38px,8.4vw,104px);letter-spacing:-.035em;margin-bottom:22px;
-  background:linear-gradient(180deg,#fff 30%,#9fd7e8 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  font-size:clamp(38px,8.4vw,104px);letter-spacing:-.035em;margin-bottom:22px;color:var(--text);
 }
-.hero h1 .ch{display:inline-block;opacity:0;transform:translateY(38px) rotate(4deg);animation:rise .8s cubic-bezier(.22,1,.36,1) forwards}
+.hero h1 .ch{
+  display:inline-block;opacity:0;transform:translateY(38px) rotate(4deg);animation:rise .8s cubic-bezier(.22,1,.36,1) forwards;
+  background:linear-gradient(180deg,#fff 30%,#9fd7e8 100%);
+  -webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;
+}
 @keyframes rise{to{opacity:1;transform:none}}
 .hero-sub{color:#b7cfdd;font-size:clamp(15px,2vw,20px);max-width:640px;margin:0 auto 34px}
 .hero-sub b{color:var(--text);font-weight:600}
@@ -172,8 +195,14 @@ p{margin:0}
 .needle-s{fill:rgba(122,231,255,.22)}
 .dial-hub{fill:var(--ink);stroke:var(--teal);stroke-width:2}
 .dial-readout{
-  position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:2px;pointer-events:none;
+  position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:2px;pointer-events:none;z-index:2;
 }
+.dial-readout::before{
+  content:"";position:absolute;left:50%;top:50%;width:170px;height:132px;
+  transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(4,16,28,.94) 55%,rgba(4,16,28,0));
+}
+.dial-value,.dial-unit,.dial-rumb{position:relative;text-shadow:0 2px 12px rgba(2,10,18,.95)}
 .dial-value{font-family:var(--mono);font-size:clamp(36px,6vw,54px);font-weight:600;letter-spacing:-.04em;line-height:1}
 .dial-unit{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
 .dial-rumb{font-family:var(--mono);font-size:14px;color:var(--teal);margin-top:6px}
@@ -225,7 +254,16 @@ p{margin:0}
 
 /* ============================ шкала Бофорта ============================ */
 .bf-scale{display:grid;grid-template-columns:repeat(13,1fr);gap:6px;align-items:flex-end;height:210px;margin-bottom:26px}
-@media(max-width:720px){.bf-scale{gap:3px;height:160px}}
+@media(max-width:720px){
+  .bf-scale{
+    gap:4px;height:160px;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:44px;
+    overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .bf-scale::-webkit-scrollbar{display:none}
+  .bf-col{scroll-snap-align:center}
+  .bf-bar{max-width:26px}
+}
 .bf-col{display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end;background:none;border:0;padding:6px 0;cursor:pointer;border-radius:8px;transition:background .2s}
 .bf-col:hover{background:rgba(122,231,255,.06)}
 .bf-bar{width:100%;border-radius:6px 6px 3px 3px;background:rgba(122,231,255,.16);height:0;transition:height 1s cubic-bezier(.22,1,.36,1),background .3s,box-shadow .3s}
@@ -313,6 +351,9 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
       <a href="#checklist">Чек-лист</a>
       <a href="#spots">Акватории</a>
     </nav>
+    <button class="nav-burger" id="navBurger" aria-label="Меню" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
   </div>
 </header>
 
@@ -766,6 +807,19 @@ function onScroll(){
 /* ======================= старт ======================= */
 async function init(){
   animateTitle();
+
+  const burger = $("#navBurger"), navLinks = $(".nav-links");
+  const setMenu = open => {
+    navLinks.classList.toggle("open", open);
+    burger.setAttribute("aria-expanded", String(open));
+  };
+  burger.addEventListener("click", () => setMenu(!navLinks.classList.contains("open")));
+  $$(".nav-links a").forEach(a => a.addEventListener("click", () => setMenu(false)));
+  document.addEventListener("click", e => {
+    if(!navLinks.classList.contains("open")) return;
+    if(navLinks.contains(e.target) || burger.contains(e.target)) return;
+    setMenu(false);
+  });
   buildTicks();
   revealObserve();
   document.addEventListener("scroll", onScroll, { passive:true });
