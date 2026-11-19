@@ -279,24 +279,6 @@ p{margin:0}
 }
 .spot-card .tag.sea{color:var(--cyan);border-color:rgba(122,231,255,.3)}
 
-/* ============================ API ============================ */
-.api-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,40px);align-items:start}
-@media(max-width:900px){.api-grid{grid-template-columns:1fr}}
-.endpoint{display:flex;gap:14px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.endpoint:last-child{border-bottom:0}
-.endpoint code{
-  font-family:var(--mono);font-size:13px;color:var(--cyan);background:rgba(122,231,255,.07);
-  padding:3px 9px;border-radius:7px;white-space:nowrap;
-}
-.endpoint .m{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#04191c;background:var(--teal);padding:3px 8px;border-radius:6px}
-.endpoint p{color:var(--muted);font-size:13.5px;flex:1;min-width:180px}
-pre{
-  margin:0;padding:22px;border:1px solid var(--line);border-radius:var(--radius);
-  background:rgba(2,10,18,.75);overflow-x:auto;
-  font-family:var(--mono);font-size:12.5px;line-height:1.75;color:#c9e6f2;
-}
-pre .c{color:var(--muted)} pre .k{color:var(--cyan)} pre .s{color:var(--sand)} pre .n{color:var(--coral)}
-
 /* ============================ подвал ============================ */
 footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);font-size:13.5px}
 .foot-inner{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
@@ -330,7 +312,6 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
       <a href="#beaufort">Шкала Бофорта</a>
       <a href="#checklist">Чек-лист</a>
       <a href="#spots">Акватории</a>
-      <a href="#api">API</a>
     </nav>
   </div>
 </header>
@@ -356,7 +337,7 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
     </svg>
 
     <div class="wrap hero-inner">
-      <div class="eyebrow" style="justify-content:center">Go · net/http · Open-Meteo · без API-ключей</div>
+      <div class="eyebrow" style="justify-content:center">Go · net/http · Open-Meteo</div>
       <h1 id="heroTitle">Ветер у марины</h1>
       <p class="hero-sub">
         Живой прогноз для парусных акваторий: сила ветра <b>в узлах</b>, порывы,
@@ -364,7 +345,6 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
       </p>
       <div class="hero-actions">
         <a class="btn primary" href="#forecast">Смотреть прогноз</a>
-        <a class="btn" href="#api">Документация API</a>
       </div>
 
       <div class="hero-live" id="heroLive">
@@ -478,43 +458,6 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
     </div>
   </section>
 
-  <!-- ======================= API ======================= -->
-  <section class="section" id="api">
-    <div class="wrap">
-      <div class="section-head reveal">
-        <div class="eyebrow">REST API</div>
-        <h2>Чистый JSON на stdlib</h2>
-        <p>Никаких внешних зависимостей: маршрутизация на нативном <code>http.ServeMux</code> с паттернами Go 1.22, ответы кешируются на 10 минут.</p>
-      </div>
-
-      <div class="api-grid reveal">
-        <div>
-          <div class="endpoint"><span class="m">GET</span><code>/api/forecast?spot=strogino</code><p>Полный прогноз по акватории: текущий ветер, 24 часа по часам, чек-лист.</p></div>
-          <div class="endpoint"><span class="m">GET</span><code>/api/spots</code><p>Справочник акваторий с координатами и признаком «море».</p></div>
-          <div class="endpoint"><span class="m">GET</span><code>/api/scale</code><p>Шкала Бофорта целиком: баллы, диапазоны, состояние воды, рекомендации.</p></div>
-          <div class="endpoint"><span class="m">GET</span><code>/api/health</code><p>Проверка живости сервиса.</p></div>
-        </div>
-        <pre id="curl"><span class="c"># прогноз ветра для Строгино</span>
-<span class="k">curl</span> <span class="s">"…/api/forecast?spot=strogino"</span>
-
-{
-  <span class="k">"spot"</span>: { <span class="k">"name"</span>: <span class="s">"Строгино"</span>, <span class="k">"region"</span>: <span class="s">"Москва, Россия"</span> },
-  <span class="k">"current"</span>: {
-    <span class="k">"wind_knots"</span>: <span class="n">12.4</span>,
-    <span class="k">"gust_knots"</span>: <span class="n">18.1</span>,
-    <span class="k">"rumb"</span>: <span class="s">"ЮЗ"</span>,
-    <span class="k">"beaufort"</span>: <span class="n">4</span>,
-    <span class="k">"beaufort_name"</span>: <span class="s">"Умеренный"</span>,
-    <span class="k">"sea_state"</span>: <span class="s">"Короткие волны, много барашков"</span>,
-    <span class="k">"sail_advice"</span>: <span class="s">"Рабочий ветер — полные паруса…"</span>,
-    <span class="k">"status"</span>: <span class="s">"good"</span>
-  },
-  <span class="k">"hours"</span>: [ <span class="c">/* 24 точки */</span> ],
-  <span class="k">"checklist"</span>: [ <span class="s">"Спасжилеты по числу экипажа…"</span> ]
-}</pre>
-      </div>
-    </div>
-  </section>
 </main>
 
 <footer>

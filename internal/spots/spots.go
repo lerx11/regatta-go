@@ -20,6 +20,16 @@ var Catalog = []Spot{
 	{Slug: "minsk-sea", Name: "Минское море", Region: "Заславль, Беларусь", Lat: 54.0282, Lon: 27.2925},
 	{Slug: "gelendzhik", Name: "Геленджик", Region: "Чёрное море, Россия", Lat: 44.5569, Lon: 38.0775, Coastal: true},
 	{Slug: "bodrum", Name: "Бодрум", Region: "Эгейское море, Турция", Lat: 37.0330, Lon: 27.4290, Coastal: true},
+	{Slug: "spb", Name: "Санкт-Петербург", Region: "Невская губа, Россия", Lat: 59.9380, Lon: 30.1600},
+	{Slug: "sochi", Name: "Сочи", Region: "Чёрное море, Россия", Lat: 43.5750, Lon: 39.7250, Coastal: true},
+	{Slug: "anapa", Name: "Анапа", Region: "Чёрное море, Россия", Lat: 44.8900, Lon: 37.3100, Coastal: true},
+	{Slug: "konakovo", Name: "Конаково", Region: "Иваньковское водохранилище, Россия", Lat: 56.7028, Lon: 36.7500},
+	{Slug: "pereslavl", Name: "Переславль", Region: "Плещеево озеро, Россия", Lat: 56.7450, Lon: 38.7800},
+	{Slug: "sevastopol", Name: "Севастополь", Region: "Чёрное море, Россия", Lat: 44.6100, Lon: 33.5200, Coastal: true},
+	{Slug: "kazan", Name: "Казань", Region: "Волга, Россия", Lat: 55.7600, Lon: 49.0900},
+	{Slug: "vladivostok", Name: "Владивосток", Region: "Японское море, Россия", Lat: 43.1000, Lon: 131.8600, Coastal: true},
+	{Slug: "marmaris", Name: "Мармарис", Region: "Эгейское море, Турция", Lat: 36.8500, Lon: 28.2700, Coastal: true},
+	{Slug: "limassol", Name: "Лимассол", Region: "Средиземное море, Кипр", Lat: 34.7000, Lon: 33.0300, Coastal: true},
 }
 
 // All возвращает копию каталога, безопасную для сериализации в JSON.
