@@ -13,13 +13,10 @@
 
 ---
 
-## Живая демка
+## Демо
 
-Публичного стенда пока нет — сервис запускается локально (см. ниже).
-После деплоя на Vercel адреса будут такими:
-
-- Landing: 
-- API: 
+Публичного стенда нет — лендинг и API поднимаются локально одной командой,
+см. раздел «Быстрый старт» ниже.
 
 ## Быстрый старт
 
@@ -64,22 +61,39 @@ curl "http://localhost:3000/api/forecast?spot=gelendzhik"
     "lat": 44.5569, "lon": 38.0775, "coastal": true
   },
   "timezone": "Europe/Moscow",
-  "generated": "2026-11-18T05:34:59Z",
+  "generated": "2026-11-19T10:47:23Z",
   "current": {
-    "time": "08:30", "date": "18.11.2026",
-    "wind_knots": 9.5, "gust_knots": 18.7, "wind_ms": 4.9,
-    "direction_deg": 189, "rumb": "Ю", "rumb_full": "юг",
-    "beaufort": 3, "beaufort_name": "Слабый",
-    "sea_state": "Короткие волны, отдельные барашки",
-    "sail_advice": "Слабый ветер — полные паруса, тонкая настройка",
-    "sailor_level": "Уверенный",
-    "status": "good",
-    "wave_m": 1.8, "wave_rumb": "ЮЗ", "wave_period_s": 6
+    "time": "13:45", "date": "19.11.2026",
+    "wind_knots": 21.6, "gust_knots": 45.3, "wind_ms": 11.1,
+    "direction_deg": 206, "rumb": "ЮЮЗ", "rumb_full": "юг-юго-запад",
+    "beaufort": 5, "beaufort_name": "Свежий",
+    "sea_state": "Волны средней высоты, белые гребни",
+    "sail_advice": "Свежо — готовим первый риф, работаем трапецией",
+    "sailor_level": "Опытный",
+    "status": "caution",
+    "wave_m": 2.4, "wave_rumb": "Ю", "wave_period_s": 6
   },
-  "hours": [ "… 24 точки: label, wind_knots, gust_knots, rumb, beaufort, wave_m …" ],
-  "checklist": [ "Спасжилеты по числу экипажа…", "…" ]
+  "hours": [
+    {
+      "time": "2026-11-19T13:00:00+03:00", "label": "13:00",
+      "wind_knots": 21.2, "gust_knots": 42.2, "direction_deg": 192,
+      "rumb": "ЮЮЗ", "beaufort": 5, "status": "caution", "wave_m": 2.4
+    },
+    {
+      "time": "2026-11-19T14:00:00+03:00", "label": "14:00",
+      "wind_knots": 21.3, "gust_knots": 45.3, "direction_deg": 211,
+      "rumb": "ЮЮЗ", "beaufort": 5, "status": "caution", "wave_m": 2.5
+    }
+  ],
+  "checklist": [
+    "Спасжилеты по числу экипажа, подогнаны по размеру",
+    "Аптечка, питьевая вода, головные уборы"
+  ]
 }
 ```
+
+Это реальный ответ, сокращённый для читаемости: в `hours` приходит 24 элемента,
+чек-лист — от 3 до 10 пунктов в зависимости от силы ветра.
 
 Поля `wave_m`, `wave_rumb` и `wave_period_s` приходят только для морских акваторий
 (`coastal: true`); для внутренних водоёмов волновой API не запрашивается.
