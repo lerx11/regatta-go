@@ -16,6 +16,7 @@ import (
 	_ "time/tzdata" // база часовых поясов внутри бинарника: на Vercel/alpine её нет
 
 	"github.com/lerx11/marina-wind/internal/api"
+	"github.com/lerx11/marina-wind/internal/booking"
 	"github.com/lerx11/marina-wind/internal/meteo"
 )
 
@@ -31,7 +32,17 @@ func main() {
 		log.Fatalf("встроенная статика: %v", err)
 	}
 
-	a := api.New(meteo.New(8 * time.Second))
+	// Без UPSTASH_* сервис стартует как обычно: прогноз работает,
+	// запись на выходы отвечает 503 с понятным пояснением.
+	var store booking.Store
+	if upstash, ok := booking.UpstashFromEnv(); ok {
+		store = upstash
+		log.Printf("бронирование: Upstash Redis подключён")
+	} else {
+		log.Printf("бронирование: UPSTASH_* не заданы, запись отключена")
+	}
+
+	a := api.New(meteo.New(8*time.Second), booking.NewService(store))
 
 	mux := http.NewServeMux()
 	a.Register(mux)                                       // /api/health, /api/spots, /api/forecast

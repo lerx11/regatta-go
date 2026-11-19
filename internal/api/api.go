@@ -6,11 +6,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/lerx11/marina-wind/internal/booking"
 	"github.com/lerx11/marina-wind/internal/meteo"
 	"github.com/lerx11/marina-wind/internal/spots"
 	"github.com/lerx11/marina-wind/internal/wind"
@@ -23,11 +25,12 @@ const cacheTTL = 10 * time.Minute
 type API struct {
 	meteo *meteo.Client
 	cache *ttlCache
+	book  *booking.Service
 }
 
-// New создаёт HTTP-слой поверх клиента Open-Meteo.
-func New(client *meteo.Client) *API {
-	return &API{meteo: client, cache: newTTLCache(cacheTTL)}
+// New создаёт HTTP-слой поверх клиента Open-Meteo и сервиса бронирования.
+func New(client *meteo.Client, book *booking.Service) *API {
+	return &API{meteo: client, cache: newTTLCache(cacheTTL), book: book}
 }
 
 // Register вешает маршруты на mux (Go 1.22+ pattern matching).
@@ -36,6 +39,8 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/spots", a.spots)
 	mux.HandleFunc("GET /api/scale", a.scale)
 	mux.HandleFunc("GET /api/forecast", a.forecast)
+	mux.HandleFunc("GET /api/trips", a.trips)
+	mux.HandleFunc("POST /api/trips/{id}/book", a.bookTrip)
 }
 
 func (a *API) health(w http.ResponseWriter, _ *http.Request) {
@@ -91,6 +96,74 @@ func (a *API) forecast(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Cache", "MISS")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	_, _ = w.Write(body)
+}
+
+// trips отдаёт расписание выходов и число занятых мест.
+func (a *API) trips(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	defer cancel()
+
+	list, booked, err := a.book.Trips(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "не удалось получить занятые места: "+err.Error())
+		return
+	}
+
+	type tripView struct {
+		booking.Trip
+		Booked *int `json:"booked"`
+		Free   *int `json:"free"`
+	}
+	views := make([]tripView, len(list))
+	for i, t := range list {
+		views[i] = tripView{Trip: t}
+		if booked != nil {
+			b := booked[i]
+			f := max(0, t.Capacity-b)
+			views[i].Booked, views[i].Free = &b, &f
+		}
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"trips":              views,
+		"storage_configured": a.book.StoreConfigured(),
+		"timezone":           "Europe/Moscow",
+	})
+}
+
+// bookTrip записывает участника на выход.
+func (a *API) bookTrip(w http.ResponseWriter, r *http.Request) {
+	var crew booking.Crew
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(&crew); err != nil {
+		writeError(w, http.StatusBadRequest, "некорректный JSON: ожидаются поля name и contact")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	result, err := a.book.Reserve(ctx, r.PathValue("id"), crew)
+	if err != nil {
+		var invalid booking.InvalidError
+		switch {
+		case errors.Is(err, booking.ErrNotConfigured):
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+		case errors.Is(err, booking.ErrFull):
+			writeError(w, http.StatusConflict, "на этот выход уже нет свободных мест")
+		case errors.Is(err, booking.ErrTripNotFound):
+			writeError(w, http.StatusNotFound, "выход не найден или уже прошёл")
+		case errors.As(err, &invalid):
+			writeError(w, http.StatusBadRequest, invalid.Error())
+		default:
+			writeError(w, http.StatusBadGateway, "не удалось сохранить запись: "+err.Error())
+		}
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, result)
 }
 
 // --- модель ответа ---
