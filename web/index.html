@@ -445,7 +445,7 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
       <div class="bf-detail reveal" id="bfDetail">
         <div class="bf-badge" id="bfBadge">—</div>
         <div class="bf-info">
-          <h3 id="bfName">Выберите балл<span id="bfRange"></span></h3>
+          <h3><span id="bfName">Выберите балл</span><span id="bfRange"></span></h3>
           <p id="bfSea">—</p>
           <p class="adv" id="bfAdvice">—</p>
           <p id="bfLevel" style="margin-top:8px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase"></p>
@@ -462,7 +462,7 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
         <h2>Чек-лист экипажа</h2>
         <p>Список собирается автоматически под текущую силу ветра — от базового набора до штормового.</p>
       </div>
-      <div class="checklist" id="checklist"></div>
+      <div class="checklist" id="checklistItems"></div>
     </div>
   </section>
 
@@ -737,7 +737,7 @@ function renderForecast(data){
   $("#hoursMeta").textContent = "часовой пояс " + data.timezone + " · обновлено " + data.current.time;
 
   // чек-лист
-  $("#checklist").innerHTML = data.checklist.map(item=>
+  $("#checklistItems").innerHTML = data.checklist.map(item=>
     '<div class="check-item"><span class="box">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' +
     '</span><span>' + item + '</span></div>'
@@ -771,7 +771,7 @@ function showLoading(){
   $("#banner").dataset.status = "ok";
   $("#bannerTitle").textContent = "Загружаем прогноз…";
   $("#bannerText").textContent = "Тянем свежие данные с Open-Meteo";
-  $("#checklist").innerHTML = '<div class="loading"><span class="spinner"></span>собираем чек-лист</div>';
+  $("#checklistItems").innerHTML = '<div class="loading"><span class="spinner"></span>собираем чек-лист</div>';
 }
 
 function showError(message){
