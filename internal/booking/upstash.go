@@ -32,15 +32,25 @@ type Upstash struct {
 	hc    *http.Client
 }
 
-// UpstashFromEnv читает UPSTASH_REDIS_REST_URL и UPSTASH_REDIS_REST_TOKEN.
-// ok == false, если хотя бы одна переменная пуста: сервис стартует без Redis.
+// UpstashFromEnv читает креды Upstash Redis.
+//
+// Сначала UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN, затем — имена,
+// которые создаёт Vercel-интеграция Upstash: KV_REST_API_URL / KV_REST_API_TOKEN.
+// Read-only токен и KV_URL/REDIS_URL не используются: они не подходят для записи.
+// ok == false, если подходящей пары нет: сервис стартует без Redis.
 func UpstashFromEnv() (u *Upstash, ok bool) {
-	url := strings.TrimSpace(os.Getenv("UPSTASH_REDIS_REST_URL"))
-	token := strings.TrimSpace(os.Getenv("UPSTASH_REDIS_REST_TOKEN"))
-	if url == "" || token == "" {
-		return nil, false
+	pairs := [][2]string{
+		{"UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"},
+		{"KV_REST_API_URL", "KV_REST_API_TOKEN"},
 	}
-	return NewUpstash(url, token), true
+	for _, p := range pairs {
+		url := strings.TrimSpace(os.Getenv(p[0]))
+		token := strings.TrimSpace(os.Getenv(p[1]))
+		if url != "" && token != "" {
+			return NewUpstash(url, token), true
+		}
+	}
+	return nil, false
 }
 
 // NewUpstash создаёт клиент Upstash.

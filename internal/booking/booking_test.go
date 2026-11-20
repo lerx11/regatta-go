@@ -263,3 +263,70 @@ func TestUpstashBookedParsesNulls(t *testing.T) {
 		t.Fatalf("Booked = %v", got)
 	}
 }
+
+func TestUpstashFromEnvSourceSelection(t *testing.T) {
+	const (
+		urlA = "https://upstash.example.io"
+		urlB = "https://kv.example.io"
+	)
+	clear := func(t *testing.T) {
+		t.Helper()
+		for _, k := range []string{
+			"UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN",
+			"KV_REST_API_URL", "KV_REST_API_TOKEN", "KV_REST_API_READ_ONLY_TOKEN",
+			"KV_URL", "REDIS_URL",
+		} {
+			t.Setenv(k, "")
+		}
+	}
+
+	t.Run("ничего не задано", func(t *testing.T) {
+		clear(t)
+		if _, ok := UpstashFromEnv(); ok {
+			t.Fatal("без переменных ожидали ok = false")
+		}
+	})
+
+	t.Run("только read-only и KV_URL", func(t *testing.T) {
+		clear(t)
+		t.Setenv("KV_REST_API_READ_ONLY_TOKEN", "ro")
+		t.Setenv("KV_URL", "redis://user:pass@host:6379")
+		t.Setenv("REDIS_URL", "redis://user:pass@host:6379")
+		if _, ok := UpstashFromEnv(); ok {
+			t.Fatal("read-only токен и KV_URL не должны включать запись")
+		}
+	})
+
+	t.Run("UPSTASH имеет приоритет", func(t *testing.T) {
+		clear(t)
+		t.Setenv("UPSTASH_REDIS_REST_URL", urlA)
+		t.Setenv("UPSTASH_REDIS_REST_TOKEN", "token-a")
+		t.Setenv("KV_REST_API_URL", urlB)
+		t.Setenv("KV_REST_API_TOKEN", "token-b")
+		u, ok := UpstashFromEnv()
+		if !ok || u.url != urlA || u.token != "token-a" {
+			t.Fatalf("ожидали UPSTASH (%s), получили %+v", urlA, u)
+		}
+	})
+
+	t.Run("fallback на KV_REST_API", func(t *testing.T) {
+		clear(t)
+		t.Setenv("KV_REST_API_URL", urlB)
+		t.Setenv("KV_REST_API_TOKEN", "token-b")
+		u, ok := UpstashFromEnv()
+		if !ok || u.url != urlB || u.token != "token-b" {
+			t.Fatalf("ожидали KV (%s), получили %+v", urlB, u)
+		}
+	})
+
+	t.Run("неполный UPSTASH падает на KV", func(t *testing.T) {
+		clear(t)
+		t.Setenv("UPSTASH_REDIS_REST_URL", urlA)
+		t.Setenv("KV_REST_API_URL", urlB)
+		t.Setenv("KV_REST_API_TOKEN", "token-b")
+		u, ok := UpstashFromEnv()
+		if !ok || u.url != urlB {
+			t.Fatalf("ожидали fallback на KV, получили %+v", u)
+		}
+	})
+}

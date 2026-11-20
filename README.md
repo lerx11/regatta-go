@@ -111,6 +111,10 @@ UPSTASH_REDIS_REST_URL=https://<регион>.upstash.io
 UPSTASH_REDIS_REST_TOKEN=<токен>
 ```
 
+Подходят и имена, которые создаёт Vercel-интеграция Upstash:
+`KV_REST_API_URL` / `KV_REST_API_TOKEN` (используются, если `UPSTASH_*` не заданы).
+Read-only токен не подходит для записи и игнорируется.
+
 Без них сервис запускается как обычно: прогноз работает, `/api/trips` отдаёт
 расписание с `storage_configured: false`, а запись отвечает `503` с пояснением.
 
