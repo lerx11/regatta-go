@@ -253,7 +253,8 @@ func TestUpstashBookedParsesNulls(t *testing.T) {
 		if args[0] != "MGET" {
 			t.Errorf("ожидали MGET, получили %v", args[0])
 		}
-		return []any{nil, 2}
+		// Реальный Upstash REST отдаёт значения счётчиков строками.
+		return []any{nil, "2"}
 	})
 	got, err := u.Booked(context.Background(), []string{"a", "b"})
 	if err != nil {
@@ -261,6 +262,14 @@ func TestUpstashBookedParsesNulls(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != 0 || got[1] != 2 {
 		t.Fatalf("Booked = %v", got)
+	}
+}
+
+func TestUpstashReserveAcceptsStringResult(t *testing.T) {
+	u := upstashStub(t, func([]any) any { return "1" })
+	n, err := u.Reserve(context.Background(), "trip-1", 4, "pid", "{}")
+	if err != nil || n != 1 {
+		t.Fatalf("Reserve = %d, %v", n, err)
 	}
 }
 

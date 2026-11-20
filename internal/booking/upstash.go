@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -72,9 +73,13 @@ func (u *Upstash) Reserve(ctx context.Context, tripID string, capacity int, part
 	if err != nil {
 		return 0, err
 	}
-	var booked int
-	if err := json.Unmarshal(raw, &booked); err != nil {
+	var bookedRaw json.RawMessage
+	if err := json.Unmarshal(raw, &bookedRaw); err != nil {
 		return 0, fmt.Errorf("upstash: неожиданный ответ EVAL: %w", err)
+	}
+	booked, err := parseRedisInt(bookedRaw)
+	if err != nil {
+		return 0, fmt.Errorf("upstash: EVAL: %w", err)
 	}
 	if booked < 0 {
 		return 0, ErrFull
@@ -96,7 +101,7 @@ func (u *Upstash) Booked(ctx context.Context, tripIDs []string) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	var values []*int
+	var values []json.RawMessage
 	if err := json.Unmarshal(raw, &values); err != nil {
 		return nil, fmt.Errorf("upstash: неожиданный ответ MGET: %w", err)
 	}
@@ -105,11 +110,32 @@ func (u *Upstash) Booked(ctx context.Context, tripIDs []string) ([]int, error) {
 	}
 	out := make([]int, len(values))
 	for i, v := range values {
-		if v != nil {
-			out[i] = *v
+		if len(v) == 0 || string(v) == "null" {
+			continue
 		}
+		n, err := parseRedisInt(v)
+		if err != nil {
+			return nil, fmt.Errorf("upstash: MGET: %w", err)
+		}
+		out[i] = n
 	}
 	return out, nil
+}
+
+// parseRedisInt разбирает число из ответа Upstash: REST может вернуть
+// как JSON-число, так и строку ("2"), в зависимости от команды.
+func parseRedisInt(raw json.RawMessage) (int, error) {
+	var n int
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return n, nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		if v, err := strconv.Atoi(s); err == nil {
+			return v, nil
+		}
+	}
+	return 0, fmt.Errorf("ожидали число, получили %s", raw)
 }
 
 // do отправляет команду Redis через REST: тело — JSON-массив аргументов.
