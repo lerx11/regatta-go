@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -56,7 +57,7 @@ func newTestService(store Store) *Service {
 	return s
 }
 
-const spbTripID = "2026-11-23-spb-12" // вместимость 2
+const spbTripID = "2026-11-20-spb-12" // ближайшая пятница 12:00 при fixedNow, вместимость 2
 
 func TestReserveLastSeatIsAtomic(t *testing.T) {
 	store := newFakeStore()
@@ -183,12 +184,16 @@ func TestScheduleIsConsistent(t *testing.T) {
 	if len(trips) != len(slots) {
 		t.Fatalf("выходов %d, ожидали %d", len(trips), len(slots))
 	}
+	idFormat := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-[a-z]+-\d{2}$`)
 	seen := map[string]bool{}
 	for _, tr := range trips {
 		if seen[tr.ID] {
 			t.Errorf("дубликат ID: %s", tr.ID)
 		}
 		seen[tr.ID] = true
+		if !idFormat.MatchString(tr.ID) {
+			t.Errorf("ID не в ожидаемом формате: %s", tr.ID)
+		}
 		if tr.Capacity <= 0 || tr.Boat == "" || tr.SpotName == "" {
 			t.Errorf("неполный выход: %+v", tr)
 		}
@@ -196,6 +201,104 @@ func TestScheduleIsConsistent(t *testing.T) {
 		if err != nil || !start.After(now) {
 			t.Errorf("выход в прошлом или не разобрался: %+v", tr)
 		}
+	}
+}
+
+// ID вечернего Строгино должен быть одним и тем же от вечера накануне
+// до минуты перед стартом — включая переход через полночь по Москве.
+func TestEveningTripIDStableBeforeStart(t *testing.T) {
+	const want = "2026-11-25-strogino-18"
+	moments := []struct {
+		name string
+		now  time.Time
+	}{
+		{"вечер 24 ноября", time.Date(2026, 11, 24, 20, 0, 0, 0, moscow)},
+		{"после полуночи", time.Date(2026, 11, 25, 0, 5, 0, 0, moscow)},
+		{"25 ноября 17:59", time.Date(2026, 11, 25, 17, 59, 0, 0, moscow)},
+	}
+	for _, m := range moments {
+		t.Run(m.name, func(t *testing.T) {
+			trips := Schedule(m.now)
+			assertNoDuplicateIDs(t, trips)
+
+			var found int
+			for _, tr := range trips {
+				if tr.ID == want {
+					found++
+					if tr.Date != "2026-11-25" || tr.Time != "18:00" {
+						t.Errorf("у %s дата/время %s %s", want, tr.Date, tr.Time)
+					}
+				}
+			}
+			if found != 1 {
+				t.Fatalf("%s встречается %d раз, ожидали один", want, found)
+			}
+			if _, ok := FindTrip(m.now, want); !ok {
+				t.Errorf("FindTrip не нашёл %s", want)
+			}
+		})
+	}
+}
+
+func TestTripClosedAtStart(t *testing.T) {
+	const id = "2026-11-25-strogino-18"
+	start := time.Date(2026, 11, 25, 18, 0, 0, 0, moscow)
+	crew := Crew{Name: "Иван", Contact: "+7 900 000-00-00"}
+
+	if _, ok := FindTrip(start, id); ok {
+		t.Errorf("в момент старта %s должен быть закрыт", id)
+	}
+
+	svc := newTestService(newFakeStore())
+	svc.SetNow(func() time.Time { return start })
+	if _, err := svc.Reserve(context.Background(), id, crew); !errors.Is(err, ErrTripNotFound) {
+		t.Errorf("в 18:00 ожидали ErrTripNotFound, получили %v", err)
+	}
+
+	before := newTestService(newFakeStore())
+	before.SetNow(func() time.Time { return start.Add(-time.Minute) })
+	if _, err := before.Reserve(context.Background(), id, crew); err != nil {
+		t.Errorf("в 17:59 запись должна проходить, получили %v", err)
+	}
+}
+
+// Набор ID, опубликованный до полуночи, не должен меняться после исправления:
+// к ним привязаны брони в Redis.
+func TestPublishedIDsPreserved(t *testing.T) {
+	now := time.Date(2026, 11, 24, 20, 0, 0, 0, moscow)
+	want := []string{
+		"2026-11-25-strogino-10",
+		"2026-11-25-strogino-18",
+		"2026-11-26-gelendzhik-11",
+		"2026-11-27-spb-12",
+		"2026-11-28-kazan-16",
+		"2026-11-30-sochi-10",
+	}
+	trips := Schedule(now)
+	assertNoDuplicateIDs(t, trips)
+
+	got := make(map[string]bool, len(trips))
+	for _, tr := range trips {
+		got[tr.ID] = true
+	}
+	for _, id := range want {
+		if !got[id] {
+			t.Errorf("пропал опубликованный выход %s", id)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("выходов %d, ожидали %d: %v", len(got), len(want), got)
+	}
+}
+
+func assertNoDuplicateIDs(t *testing.T, trips []Trip) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, tr := range trips {
+		if seen[tr.ID] {
+			t.Errorf("дубликат ID: %s", tr.ID)
+		}
+		seen[tr.ID] = true
 	}
 }
 

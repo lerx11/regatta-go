@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -152,20 +153,22 @@ func Validate(c Crew) error {
 // --- расписание ---
 
 type slot struct {
-	spot      string
-	boat      string
-	capacity  int
-	hour      int
-	daysAhead int
+	spot     string
+	boat     string
+	capacity int
+	hour     int
+	weekday  time.Weekday
 }
 
+// Выходы повторяются раз в неделю: дата считается от дня недели, а не от
+// «сегодня + N», поэтому карточка не переезжает на следующий день в полночь.
 var slots = []slot{
-	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 10, daysAhead: 0},
-	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 18, daysAhead: 1},
-	{spot: "gelendzhik", boat: "МХ700", capacity: 6, hour: 11, daysAhead: 2},
-	{spot: "spb", boat: "Оптимист", capacity: 2, hour: 12, daysAhead: 3},
-	{spot: "kazan", boat: "МХ700", capacity: 6, hour: 16, daysAhead: 4},
-	{spot: "sochi", boat: "Яхта 34 фута", capacity: 8, hour: 10, daysAhead: 6},
+	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 10, weekday: time.Wednesday},
+	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 18, weekday: time.Wednesday},
+	{spot: "gelendzhik", boat: "МХ700", capacity: 6, hour: 11, weekday: time.Thursday},
+	{spot: "spb", boat: "Оптимист", capacity: 2, hour: 12, weekday: time.Friday},
+	{spot: "kazan", boat: "МХ700", capacity: 6, hour: 16, weekday: time.Saturday},
+	{spot: "sochi", boat: "Яхта 34 фута", capacity: 8, hour: 10, weekday: time.Monday},
 }
 
 var moscow = func() *time.Location {
@@ -181,15 +184,16 @@ var (
 	months   = [...]string{"января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"}
 )
 
-// Schedule возвращает ближайшие выходы; уже начавшиеся не показывает.
+// Schedule возвращает ближайшие выходы.
+//
+// Выход остаётся с тем же ID до момента старта, в том числе после полуночи:
+// дата привязана к дню недели, а не к «сегодня + N». После старта карточка
+// закрывается, и на её месте появляется выход следующей недели.
 func Schedule(now time.Time) []Trip {
 	now = now.In(moscow)
 	trips := make([]Trip, 0, len(slots))
 	for _, s := range slots {
-		start := time.Date(now.Year(), now.Month(), now.Day()+s.daysAhead, s.hour, 0, 0, 0, moscow)
-		if !start.After(now) {
-			continue
-		}
+		start := nextStart(now, s.weekday, s.hour)
 		sp, ok := spots.Find(s.spot)
 		if !ok {
 			continue
@@ -205,7 +209,26 @@ func Schedule(now time.Time) []Trip {
 			Capacity: s.capacity,
 		})
 	}
+	sort.Slice(trips, func(i, j int) bool {
+		if trips[i].Date != trips[j].Date {
+			return trips[i].Date < trips[j].Date
+		}
+		return trips[i].Time < trips[j].Time
+	})
 	return trips
+}
+
+// nextStart — ближайшее наступление дня недели и часа по Москве.
+// Если сегодняшний выход уже начался, берётся следующий на той же неделе.
+func nextStart(now time.Time, weekday time.Weekday, hour int) time.Time {
+	now = now.In(moscow)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, moscow)
+	days := (int(weekday) - int(today.Weekday()) + 7) % 7
+	start := today.AddDate(0, 0, days).Add(time.Duration(hour) * time.Hour)
+	if !start.After(now) {
+		start = start.AddDate(0, 0, 7)
+	}
+	return start
 }
 
 // FindTrip ищет актуальный выход по ID.
