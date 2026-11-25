@@ -18,6 +18,7 @@ import (
 	"github.com/lerx11/marina-wind/internal/api"
 	"github.com/lerx11/marina-wind/internal/booking"
 	"github.com/lerx11/marina-wind/internal/meteo"
+	"github.com/lerx11/marina-wind/internal/notify"
 )
 
 //go:embed web
@@ -42,10 +43,37 @@ func main() {
 		log.Printf("бронирование: UPSTASH_* не заданы, запись отключена")
 	}
 
-	a := api.New(meteo.New(8*time.Second), booking.NewService(store))
+	// Уведомление владельцу: без переменных заявки всё равно сохраняются.
+	var telegram booking.Notifier
+	if tg, ok := notify.FromEnv(); ok {
+		telegram = tg
+		log.Printf("уведомления: Telegram подключён")
+	} else {
+		log.Printf("уведомления: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID не заданы, отправка отключена")
+	}
+
+	book := booking.NewService(store)
+	book.SetNotifier(telegram)
+
+	a := api.New(meteo.New(8*time.Second), book)
 
 	mux := http.NewServeMux()
-	a.Register(mux)                                       // /api/health, /api/spots, /api/forecast
+	a.Register(mux) // /api/health, /api/spots, /api/forecast
+
+	// Закрытый экран клуба: без cookie отдаём страницу входа, с ней — сам экран.
+	mux.HandleFunc("GET /club", func(w http.ResponseWriter, r *http.Request) {
+		page := "club-login.html"
+		if api.ClubAuthorized(r) {
+			page = "club.html"
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		http.ServeFileFS(w, r, static, page)
+	})
+	// Прямой доступ к файлу экрана закрываем: только через /club.
+	mux.HandleFunc("GET /club.html", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/club", http.StatusFound)
+	})
+
 	mux.Handle("GET /", http.FileServer(http.FS(static))) // лендинг
 
 	srv := &http.Server{

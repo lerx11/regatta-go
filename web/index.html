@@ -318,6 +318,39 @@ p{margin:0}
 .spot-card .tag.sea{color:var(--cyan);border-color:rgba(122,231,255,.3)}
 
 /* ============================ выходы на воду ============================ */
+.next-trip{
+  display:grid;grid-template-columns:1fr auto;gap:18px 28px;align-items:center;
+  padding:clamp(20px,3vw,30px);margin-bottom:22px;border:1px solid rgba(53,209,196,.35);
+  border-radius:var(--radius);
+  background:linear-gradient(135deg,rgba(53,209,196,.12),rgba(6,26,43,.4) 60%);
+}
+.next-trip[hidden]{display:none}
+.next-eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--teal)}
+.next-trip h3{font-size:clamp(22px,3vw,30px);margin:6px 0 4px}
+.next-when{color:var(--text);font-size:15.5px}
+.next-when b{font-weight:650}
+.next-forecast{
+  grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);
+}
+.next-forecast .fc-value{font-family:var(--mono);font-size:15px;color:var(--text)}
+.next-forecast .fc-muted{color:var(--muted)}
+.next-trip .btn{white-space:nowrap}
+.trip-empty{
+  padding:22px;margin-bottom:22px;border:1px dashed var(--line);border-radius:var(--radius);
+  color:var(--muted);font-size:14.5px;
+}
+.trip-empty[hidden]{display:none}
+.trip-context{
+  grid-column:1/-1;padding:14px 16px;border:1px solid rgba(122,231,255,.24);border-radius:12px;
+  background:rgba(122,231,255,.06);font-size:14px;color:var(--text);
+}
+.trip-context[hidden]{display:none}
+.trip-context b{font-weight:650}
+@media(max-width:720px){
+  .next-trip{grid-template-columns:1fr}
+  .next-trip .btn{justify-self:start}
+}
 .trip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:24px}
 .trip-card{
   display:flex;flex-direction:column;gap:10px;padding:22px;border:1px solid var(--line);
@@ -547,12 +580,24 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
       <div class="section-head reveal">
         <div class="eyebrow">Запись на воду</div>
         <h2>Выходы с инструктором</h2>
-        <p>Небольшие группы на подготовленных лодках. Выберите выход и оставьте имя с контактом — место закрепится за вами.</p>
+        <p>Небольшие группы на подготовленных лодках. Выберите выход и оставьте имя с контактом — заявка сохранится.</p>
       </div>
+
+      <div class="next-trip reveal" id="nextTrip" hidden>
+        <div>
+          <div class="next-eyebrow">Ближайший выход · время МСК</div>
+          <h3 id="nextTitle"></h3>
+          <p class="next-when" id="nextWhen"></p>
+        </div>
+        <button class="btn primary" type="button" id="nextBook">Оставить заявку</button>
+        <div class="next-forecast" id="nextForecast"></div>
+      </div>
+      <p class="trip-empty reveal" id="nextEmpty" hidden>В этой акватории пока нет запланированных выходов</p>
 
       <div class="trip-grid reveal" id="tripGrid"></div>
 
       <form class="trip-form reveal" id="tripForm" novalidate>
+        <div class="trip-context" id="tripContext" hidden></div>
         <div class="field">
           <label for="tripName">Имя</label>
           <input id="tripName" name="name" autocomplete="name" placeholder="Как к вам обращаться">
@@ -561,8 +606,8 @@ footer{border-top:1px solid var(--line);padding-block:44px;color:var(--muted);fo
           <label for="tripContact">Контакт</label>
           <input id="tripContact" name="contact" autocomplete="email" placeholder="Телефон или e-mail">
         </div>
-        <button class="btn primary" type="submit" id="tripSubmit">Записаться</button>
-        <p class="trip-note" id="tripNote">Выберите выход в расписании выше.</p>
+        <button class="btn primary" type="submit" id="tripSubmit">Оставить заявку</button>
+        <p class="trip-note" id="tripNote">Выберите выход — кнопка «Оставить заявку» в карточке.</p>
       </form>
     </div>
   </section>
@@ -842,13 +887,66 @@ async function selectSpot(slug){
     const data = await getJSON("/api/forecast?spot=" + encodeURIComponent(slug));
     state.forecast = data;
     renderForecast(data);
+    renderNextTrip();
   }catch(err){
     showError(err.message);
+    renderNextTrip();
   }
 }
 
 /* ======================= выходы на воду ======================= */
 const bookingState = { trips:[], selected:null, storage:false };
+
+// Ключ «дата + час по Москве»: прогноз приходит в часовом поясе акватории,
+// а выходы расписаны по Москве — сравниваем в одном поясе.
+const MSK_FMT = new Intl.DateTimeFormat("en-GB",{
+  timeZone:"Europe/Moscow", year:"numeric", month:"2-digit", day:"2-digit",
+  hour:"2-digit", hourCycle:"h23"
+});
+function moscowHourKey(iso){
+  const parts = MSK_FMT.formatToParts(new Date(iso));
+  const get = type => (parts.find(p => p.type === type) || {}).value || "";
+  return get("year") + "-" + get("month") + "-" + get("day") + "T" + get("hour");
+}
+function forecastForStart(trip){
+  const f = state.forecast;
+  if(!f || !f.spot || f.spot.slug !== trip.spot || !Array.isArray(f.hours)) return null;
+  const key = trip.date + "T" + trip.time.slice(0,2);
+  return f.hours.find(h => moscowHourKey(h.time) === key) || null;
+}
+
+function renderNextTrip(){
+  const block = $("#nextTrip");
+  const empty = $("#nextEmpty");
+  const trip = bookingState.trips.find(t => t.spot === state.spot); // список уже отсортирован
+  if(!trip){
+    block.hidden = true;
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  block.hidden = false;
+
+  $("#nextTitle").textContent = trip.spot_name;
+  $("#nextWhen").innerHTML = "<b>" + trip.label + "</b> · <b>" + trip.time + " МСК</b>";
+
+  const hour = forecastForStart(trip);
+  const fc = $("#nextForecast");
+  if(hour){
+    fc.innerHTML =
+      '<span class="fc-value">' + Math.round(hour.wind_knots) + " уз</span>" +
+      "<span>порывы " + Math.round(hour.gust_knots) + " уз</span>" +
+      "<span>" + hour.rumb + "</span>" +
+      "<span>" + hour.status + "</span>";
+  }else{
+    fc.innerHTML = '<span class="fc-muted">Прогноз на время выхода пока недоступен</span>';
+  }
+
+  const btn = $("#nextBook");
+  const available = bookingState.storage && trip.free != null && trip.free > 0;
+  btn.disabled = !available;
+  btn.onclick = available ? () => selectTrip(trip) : null;
+}
 
 function renderTrips(data){
   bookingState.trips = data.trips || [];
@@ -865,7 +963,7 @@ function renderTrips(data){
       '<h3></h3>' +
       '<div class="trip-meta"><span>Лодка: <b></b></span><span>Экипаж: <b></b></span></div>' +
       '<div class="trip-seats"><span class="free"></span><button class="trip-book" type="button"></button></div>';
-    card.querySelector(".trip-when").textContent = t.label + " · " + t.time;
+    card.querySelector(".trip-when").textContent = t.label + " · " + t.time + " МСК";
     card.querySelector("h3").textContent = t.spot_name;
     const metas = card.querySelectorAll(".trip-meta b");
     metas[0].textContent = t.boat;
@@ -881,7 +979,7 @@ function renderTrips(data){
       freeEl.textContent = t.free > 0 ? "свободно " + t.free + " из " + t.capacity : "мест нет";
       if(t.free === 0) freeEl.classList.add("none");
       else if(t.free <= 2) freeEl.classList.add("few");
-      btn.textContent = t.free === 0 ? "Мест нет" : "Выбрать";
+      btn.textContent = t.free === 0 ? "Мест нет" : "Оставить заявку";
       btn.disabled = t.free === 0;
       if(t.free > 0) btn.addEventListener("click", ()=>selectTrip(t));
     }
@@ -900,19 +998,29 @@ function renderTrips(data){
     submit.disabled = true;
   }else{
     note.className = "trip-note";
-    if(!bookingState.selected) note.textContent = "Выберите выход в расписании выше.";
+    if(!bookingState.selected) note.textContent = "Выберите выход — кнопка «Оставить заявку» в карточке.";
     submit.disabled = false;
   }
+  renderNextTrip();
   revealObserve();
 }
 
 function selectTrip(t){
   bookingState.selected = t;
   $$(".trip-card").forEach(c=>c.classList.toggle("selected", c.dataset.id === t.id));
+
+  const ctx = $("#tripContext");
+  ctx.hidden = false;
+  ctx.innerHTML = "Акватория: <b>" + t.spot_name + "</b> · Дата: <b>" + t.label +
+    "</b> · Время: <b>" + t.time + " МСК</b>";
+
   const note = $("#tripNote");
   note.className = "trip-note";
-  note.textContent = "Выбран выход: " + t.label + ", " + t.time + " · " + t.spot_name + " · " + t.boat;
-  $("#tripName").focus();
+  note.textContent = "Выход выбран — заполните имя и контакт.";
+
+  const form = $("#tripForm");
+  if(form.scrollIntoView) form.scrollIntoView({ behavior:"smooth", block:"center" });
+  $("#tripName").focus({ preventScroll:true });
 }
 
 async function loadTrips(){
@@ -925,8 +1033,11 @@ async function loadTrips(){
   }
 }
 
+let submitting = false;
 async function submitBooking(e){
   e.preventDefault();
+  if(submitting) return; // повторный клик не создаёт вторую заявку
+
   const note = $("#tripNote");
   if(!bookingState.selected){
     note.className = "trip-note err";
@@ -937,9 +1048,10 @@ async function submitBooking(e){
   const name = $("#tripName").value.trim();
   const contact = $("#tripContact").value.trim();
   const btn = $("#tripSubmit");
+  submitting = true;
   btn.disabled = true;
   note.className = "trip-note";
-  note.textContent = "Отправляем запись…";
+  note.textContent = "Отправляем заявку…";
 
   try{
     const res = await fetch("/api/trips/" + encodeURIComponent(bookingState.selected.id) + "/book", {
@@ -948,20 +1060,38 @@ async function submitBooking(e){
       body: JSON.stringify({ name, contact }),
     });
     const data = await res.json().catch(()=>null);
-    if(!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+    if(!res.ok){
+      const err = new Error((data && data.error) || ("HTTP " + res.status));
+      err.code = data && data.code;
+      throw err;
+    }
 
+    // Заявка сохранена: очищаем форму и показываем только подтверждение.
     $("#tripName").value = "";
     $("#tripContact").value = "";
     bookingState.selected = null;
     $$(".trip-card").forEach(c=>c.classList.remove("selected"));
+    $("#tripContext").hidden = true;
     await loadTrips();
     note.className = "trip-note ok";
-    note.textContent = "Готово! Место закреплено за " + name + ". Свободно мест: " + data.seats_left + ".";
+    note.textContent = "Спасибо! Заявка получена";
   }catch(err){
-    note.className = "trip-note err";
-    note.textContent = err.message;
-    if(/мест/i.test(err.message)) loadTrips();
+    const started = err.code === "trip_started";
+    if(started){
+      bookingState.selected = null;
+      $$(".trip-card").forEach(c=>c.classList.remove("selected"));
+      $("#tripContext").hidden = true;
+      await loadTrips();
+      note.className = "trip-note err";
+      note.textContent = "Запись закрыта. Выход уже начался";
+    }else{
+      if(/мест/i.test(err.message)) await loadTrips();
+      note.className = "trip-note err";
+      note.textContent = "Не удалось отправить заявку: " + err.message +
+        ". Данные сохранены — попробуйте ещё раз.";
+    }
   }finally{
+    submitting = false;
     btn.disabled = !bookingState.storage;
   }
 }

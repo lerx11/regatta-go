@@ -5,10 +5,15 @@ package api
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +46,12 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/forecast", a.forecast)
 	mux.HandleFunc("GET /api/trips", a.trips)
 	mux.HandleFunc("POST /api/trips/{id}/book", a.bookTrip)
+
+	// Закрытый экран клуба: страницу /club отдаёт main.go, ниже — данные.
+	mux.HandleFunc("POST /api/club/login", a.clubLogin)
+	mux.HandleFunc("POST /api/club/logout", a.clubLogout)
+	mux.HandleFunc("GET /api/club/trips", a.clubTrips)
+	mux.HandleFunc("GET /api/club/trips/{id}", a.clubTrip)
 }
 
 func (a *API) health(w http.ResponseWriter, _ *http.Request) {
@@ -152,6 +163,11 @@ func (a *API) bookTrip(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusServiceUnavailable, err.Error())
 		case errors.Is(err, booking.ErrFull):
 			writeError(w, http.StatusConflict, "на этот выход уже нет свободных мест")
+		case errors.Is(err, booking.ErrTripStarted):
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "Запись закрыта. Выход уже начался",
+				"code":  "trip_started",
+			})
 		case errors.Is(err, booking.ErrTripNotFound):
 			writeError(w, http.StatusNotFound, "выход не найден или уже прошёл")
 		case errors.As(err, &invalid):
@@ -164,6 +180,142 @@ func (a *API) bookTrip(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, result)
+}
+
+// --- закрытый экран клуба ---
+
+const clubCookie = "regatta_club"
+
+// clubPassword читает пароль клуба из окружения при каждом запросе.
+func clubPassword() string { return strings.TrimSpace(os.Getenv("CLUB_PASSWORD")) }
+
+// clubToken — HMAC от пароля: в cookie не лежит сам пароль, а при его смене
+// старые cookie автоматически перестают действовать.
+func clubToken(password string) string {
+	mac := hmac.New(sha256.New, []byte(password))
+	mac.Write([]byte("regatta-club-v1"))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// ClubAuthorized проверяет cookie клуба. Используется и в main.go при отдаче
+// страницы /club, и в обработчиках данных.
+func ClubAuthorized(r *http.Request) bool {
+	password := clubPassword()
+	if password == "" {
+		return false
+	}
+	c, err := r.Cookie(clubCookie)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal([]byte(c.Value), []byte(clubToken(password)))
+}
+
+func (a *API) clubLogin(w http.ResponseWriter, r *http.Request) {
+	password := clubPassword()
+	if password == "" {
+		writeError(w, http.StatusServiceUnavailable, "вход в клуб не настроен: задайте CLUB_PASSWORD")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "некорректный JSON: ожидается поле password")
+		return
+	}
+	if !hmac.Equal([]byte(body.Password), []byte(password)) {
+		writeError(w, http.StatusUnauthorized, "неверный пароль")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     clubCookie,
+		Value:    clubToken(password),
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecure(r),
+		MaxAge:   12 * 60 * 60,
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *API) clubLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     clubCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecure(r),
+		MaxAge:   -1,
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *API) clubTrips(w http.ResponseWriter, r *http.Request) {
+	if !requireClub(w, r) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	current, next, err := a.book.ClubTrips(ctx)
+	if err != nil {
+		writeClubError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"current":  current,
+		"next":     next,
+		"timezone": "Europe/Moscow",
+	})
+}
+
+func (a *API) clubTrip(w http.ResponseWriter, r *http.Request) {
+	if !requireClub(w, r) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	detail, err := a.book.ClubTrip(ctx, r.PathValue("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, booking.ErrTripNotFound):
+			writeError(w, http.StatusNotFound, "выход не найден")
+		default:
+			writeClubError(w, err)
+		}
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, detail)
+}
+
+// requireClub пускает дальше только с действующей cookie клуба.
+func requireClub(w http.ResponseWriter, r *http.Request) bool {
+	if ClubAuthorized(r) {
+		return true
+	}
+	writeError(w, http.StatusUnauthorized, "нужен пароль клуба")
+	return false
+}
+
+func writeClubError(w http.ResponseWriter, err error) {
+	if errors.Is(err, booking.ErrNotConfigured) {
+		writeError(w, http.StatusServiceUnavailable, "данные клуба недоступны: не настроен Upstash Redis")
+		return
+	}
+	writeError(w, http.StatusBadGateway, "не удалось загрузить данные клуба")
+}
+
+func isSecure(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // --- модель ответа ---

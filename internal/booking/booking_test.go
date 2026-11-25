@@ -19,11 +19,11 @@ import (
 type fakeStore struct {
 	mu     sync.Mutex
 	booked map[string]int
-	crew   map[string][]string
+	crew   map[string][]Member
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{booked: map[string]int{}, crew: map[string][]string{}}
+	return &fakeStore{booked: map[string]int{}, crew: map[string][]Member{}}
 }
 
 func (f *fakeStore) Reserve(_ context.Context, tripID string, capacity int, participantID, payload string) (int, error) {
@@ -33,8 +33,20 @@ func (f *fakeStore) Reserve(_ context.Context, tripID string, capacity int, part
 		return 0, ErrFull
 	}
 	f.booked[tripID]++
-	f.crew[tripID] = append(f.crew[tripID], payload)
+
+	var m Member
+	_ = json.Unmarshal([]byte(payload), &m)
+	m.ParticipantID = participantID
+	f.crew[tripID] = append(f.crew[tripID], m)
 	return f.booked[tripID], nil
+}
+
+func (f *fakeStore) Crew(_ context.Context, tripID string) ([]Member, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]Member, len(f.crew[tripID]))
+	copy(out, f.crew[tripID])
+	return out, nil
 }
 
 func (f *fakeStore) Booked(_ context.Context, ids []string) ([]int, error) {
@@ -248,11 +260,15 @@ func TestTripClosedAtStart(t *testing.T) {
 	if _, ok := FindTrip(start, id); ok {
 		t.Errorf("в момент старта %s должен быть закрыт", id)
 	}
+	// Клуб по-прежнему находит этот выход по стабильному ID.
+	if _, ok := FindTripAny(start, id); !ok {
+		t.Errorf("FindTripAny должен находить %s после старта", id)
+	}
 
 	svc := newTestService(newFakeStore())
 	svc.SetNow(func() time.Time { return start })
-	if _, err := svc.Reserve(context.Background(), id, crew); !errors.Is(err, ErrTripNotFound) {
-		t.Errorf("в 18:00 ожидали ErrTripNotFound, получили %v", err)
+	if _, err := svc.Reserve(context.Background(), id, crew); !errors.Is(err, ErrTripStarted) {
+		t.Errorf("в 18:00 ожидали ErrTripStarted, получили %v", err)
 	}
 
 	before := newTestService(newFakeStore())
@@ -299,6 +315,149 @@ func assertNoDuplicateIDs(t *testing.T, trips []Trip) {
 			t.Errorf("дубликат ID: %s", tr.ID)
 		}
 		seen[tr.ID] = true
+	}
+}
+
+// Клуб видит текущую и следующую неделю раздельно; начавшийся выход
+// остаётся в текущей неделе и открывается по стабильному ID.
+func TestClubTripsSplitByWeek(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(store)
+	svc.SetNow(func() time.Time { return time.Date(2026, 11, 25, 17, 59, 0, 0, moscow) })
+
+	if _, err := svc.Reserve(context.Background(), "2026-11-25-strogino-18", Crew{Name: "Иван", Contact: "+7 900 000-00-00"}); err != nil {
+		t.Fatalf("Reserve до старта: %v", err)
+	}
+
+	current, next, err := svc.ClubTrips(context.Background())
+	if err != nil {
+		t.Fatalf("ClubTrips: %v", err)
+	}
+	if len(current) != len(slots) || len(next) != len(slots) {
+		t.Fatalf("текущая/следующая неделя: %d/%d, ожидали %d/%d", len(current), len(next), len(slots), len(slots))
+	}
+
+	cur := map[string]ClubTrip{}
+	for _, tr := range current {
+		cur[tr.ID] = tr
+	}
+	ten, ok := cur["2026-11-25-strogino-10"]
+	if !ok || !ten.Started {
+		t.Errorf("утренний выход должен быть в текущей неделе и уже начаться: %+v", ten)
+	}
+	evening, ok := cur["2026-11-25-strogino-18"]
+	if !ok || evening.Started {
+		t.Errorf("вечерний выход в 17:59 ещё не начался: %+v", evening)
+	}
+	if evening.Booked != 1 {
+		t.Errorf("у вечернего выхода %d заявок, ожидали 1", evening.Booked)
+	}
+	if _, ok := cur["2026-11-26-gelendzhik-11"]; !ok {
+		t.Error("выход четверга должен быть в текущей неделе")
+	}
+
+	for _, tr := range next {
+		if tr.Started {
+			t.Errorf("выход следующей недели не может быть начавшимся: %s", tr.ID)
+		}
+	}
+	nextIDs := map[string]bool{}
+	for _, tr := range next {
+		nextIDs[tr.ID] = true
+	}
+	for _, id := range []string{"2026-11-30-sochi-10", "2026-12-02-strogino-18", "2026-12-05-kazan-16"} {
+		if !nextIDs[id] {
+			t.Errorf("в следующей неделе нет %s: %v", id, nextIDs)
+		}
+	}
+}
+
+func TestClubTripOpensAfterStart(t *testing.T) {
+	store := newFakeStore()
+	const id = "2026-11-25-strogino-18"
+
+	before := newTestService(store)
+	before.SetNow(func() time.Time { return time.Date(2026, 11, 25, 17, 59, 0, 0, moscow) })
+	if _, err := before.Reserve(context.Background(), id, Crew{Name: "Иван", Contact: "+7 900 000-00-00"}); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	after := newTestService(store)
+	after.SetNow(func() time.Time { return time.Date(2026, 11, 25, 18, 0, 0, 0, moscow) })
+
+	if _, ok := FindTrip(after.now(), id); ok {
+		t.Error("публичное расписание не должно показывать начавшийся выход")
+	}
+	detail, err := after.ClubTrip(context.Background(), id)
+	if err != nil {
+		t.Fatalf("ClubTrip после старта: %v", err)
+	}
+	if !detail.Started || detail.Booked != 1 || len(detail.Crew) != 1 {
+		t.Fatalf("после старта: %+v", detail)
+	}
+	if detail.Crew[0].Name != "Иван" {
+		t.Errorf("имя участника = %q", detail.Crew[0].Name)
+	}
+	if _, err := after.ClubTrip(context.Background(), "2026-11-25-strogino-10"); err != nil {
+		t.Errorf("утренний выход тоже должен открываться: %v", err)
+	}
+}
+
+type fakeNotifier struct {
+	mu    sync.Mutex
+	texts []string
+	err   error
+}
+
+func (n *fakeNotifier) Send(_ context.Context, text string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.err != nil {
+		return n.err
+	}
+	n.texts = append(n.texts, text)
+	return nil
+}
+
+func TestReserveSendsOneNotification(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(store)
+	note := &fakeNotifier{}
+	svc.SetNotifier(note)
+
+	crew := Crew{Name: "Иван", Contact: "+7 900 000-00-00"}
+	if _, err := svc.Reserve(context.Background(), spbTripID, crew); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	note.mu.Lock()
+	defer note.mu.Unlock()
+	if len(note.texts) != 1 {
+		t.Fatalf("уведомлений %d, ожидали одно", len(note.texts))
+	}
+	for _, want := range []string{"Санкт-Петербург", "МСК", "Иван", crew.Contact} {
+		if !strings.Contains(note.texts[0], want) {
+			t.Errorf("в уведомлении нет %q:\n%s", want, note.texts[0])
+		}
+	}
+}
+
+func TestReserveSurvivesNotifierFailure(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(store)
+	svc.SetNotifier(&fakeNotifier{err: errors.New("telegram: HTTP 502")})
+
+	res, err := svc.Reserve(context.Background(), spbTripID, Crew{Name: "Иван", Contact: "+7 900 000-00-00"})
+	if err != nil {
+		t.Fatalf("сбой уведомления не должен отменять заявку: %v", err)
+	}
+	if res.Booked != 1 {
+		t.Errorf("занято %d мест, ожидали 1", res.Booked)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.crew[spbTripID]) != 1 {
+		t.Errorf("участник не сохранён")
 	}
 }
 
@@ -373,6 +532,34 @@ func TestUpstashReserveAcceptsStringResult(t *testing.T) {
 	n, err := u.Reserve(context.Background(), "trip-1", 4, "pid", "{}")
 	if err != nil || n != 1 {
 		t.Fatalf("Reserve = %d, %v", n, err)
+	}
+}
+
+func TestUpstashCrewReadsHash(t *testing.T) {
+	u := upstashStub(t, func(args []any) any {
+		if args[0] != "HGETALL" || len(args) != 2 {
+			t.Fatalf("ожидали HGETALL с одним ключом, получили %v", args)
+		}
+		if args[1] != "regatta:trip:trip-1:crew" {
+			t.Errorf("ключ = %v", args[1])
+		}
+		return []any{
+			"p2", `{"name":"Пётр","contact":"petr@example.com","at":"2026-11-25T15:01:00Z"}`,
+			"p1", `{"name":"Иван","contact":"+7 900 000-00-00","at":"2026-11-25T15:00:00Z"}`,
+		}
+	})
+	members, err := u.Crew(context.Background(), "trip-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("участников %d, ожидали 2", len(members))
+	}
+	if members[0].ParticipantID != "p1" || members[0].Name != "Иван" {
+		t.Errorf("первый участник: %+v", members[0])
+	}
+	if members[1].Contact != "petr@example.com" {
+		t.Errorf("второй участник: %+v", members[1])
 	}
 }
 

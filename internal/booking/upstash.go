@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -118,6 +119,66 @@ func (u *Upstash) Booked(ctx context.Context, tripIDs []string) ([]int, error) {
 			return nil, fmt.Errorf("upstash: MGET: %w", err)
 		}
 		out[i] = n
+	}
+	return out, nil
+}
+
+// Crew читает экипаж выхода: hash participantID → JSON участника.
+func (u *Upstash) Crew(ctx context.Context, tripID string) ([]Member, error) {
+	raw, err := u.do(ctx, "HGETALL", crewKey(tripID))
+	if err != nil {
+		return nil, err
+	}
+	pairs, err := hashPairs(raw)
+	if err != nil {
+		return nil, fmt.Errorf("upstash: HGETALL: %w", err)
+	}
+	members := make([]Member, 0, len(pairs))
+	for pid, payload := range pairs {
+		var m Member
+		if err := json.Unmarshal([]byte(payload), &m); err != nil {
+			continue // одна битая запись не должна ломать весь экран клуба
+		}
+		m.ParticipantID = pid
+		members = append(members, m)
+	}
+	sort.Slice(members, func(i, j int) bool {
+		if members[i].At != members[j].At {
+			return members[i].At < members[j].At
+		}
+		return members[i].Name < members[j].Name
+	})
+	return members, nil
+}
+
+// hashPairs разбирает HGETALL: Upstash REST отдаёт либо плоский массив
+// [поле, значение, ...], либо объект — поддерживаем оба вида.
+func hashPairs(raw json.RawMessage) (map[string]string, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return map[string]string{}, nil
+	}
+	var asMap map[string]string
+	if err := json.Unmarshal(raw, &asMap); err == nil {
+		return asMap, nil
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil, err
+	}
+	if len(arr)%2 != 0 {
+		return nil, errors.New("нечётное число элементов")
+	}
+	out := make(map[string]string, len(arr)/2)
+	for i := 0; i < len(arr); i += 2 {
+		var field, value string
+		if err := json.Unmarshal(arr[i], &field); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(arr[i+1], &value); err != nil {
+			return nil, err
+		}
+		out[field] = value
 	}
 	return out, nil
 }

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Клуб — вход</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛵</text></svg>">
+<style>
+:root{
+  --ink:#04101c; --teal:#35d1c4; --cyan:#7ae7ff; --text:#eaf4fb; --muted:#85a4bb;
+  --line:rgba(122,231,255,.14); --red:#ff5d6c;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;
+  background:
+    radial-gradient(120% 80% at 20% 0%,rgba(53,209,196,.18),transparent 55%),
+    radial-gradient(90% 70% at 85% 15%,rgba(122,231,255,.12),transparent 60%),
+    linear-gradient(180deg,#061c2e 0%,#04101c 62%,#020a12 100%);
+  color:var(--text);font-family:var(--sans);line-height:1.6;
+}
+.card{
+  width:min(400px,100%);padding:clamp(24px,5vw,38px);border:1px solid var(--line);
+  border-radius:20px;background:rgba(6,26,43,.62);backdrop-filter:blur(8px);
+  box-shadow:0 24px 60px rgba(0,0,0,.45);
+}
+.eyebrow{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--teal);margin-bottom:14px;
+}
+h1{margin:0 0 8px;font-size:26px;letter-spacing:-.02em}
+p{margin:0 0 22px;color:var(--muted);font-size:14px}
+label{
+  display:block;font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+input{
+  width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+  background:rgba(4,16,28,.6);color:var(--text);font:inherit;font-size:15px;outline:none;
+  transition:border-color .2s;
+}
+input:focus{border-color:rgba(122,231,255,.5)}
+button{
+  width:100%;margin-top:16px;padding:13px 16px;border-radius:12px;border:0;cursor:pointer;
+  background:linear-gradient(135deg,var(--teal),#22a79c);color:#04191c;
+  font:inherit;font-weight:650;transition:filter .2s,opacity .2s;
+}
+button:hover:not(:disabled){filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.note{min-height:1.3em;margin-top:14px;font-size:13.5px;color:var(--muted)}
+.note.err{color:var(--red)}
+.back{display:inline-block;margin-top:20px;color:var(--muted);font-size:13px;text-decoration:none}
+.back:hover{color:var(--cyan)}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="eyebrow">Закрытый раздел</div>
+  <h1>Выходы и экипажи</h1>
+  <p>Экран клуба: списки заявок на текущую и следующую неделю.</p>
+  <form id="loginForm">
+    <label for="password">Пароль клуба</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit" id="submit">Войти</button>
+    <div class="note" id="note"></div>
+  </form>
+  <a class="back" href="/">← На сайт</a>
+</main>
+<script>
+"use strict";
+const form = document.getElementById("loginForm");
+const note = document.getElementById("note");
+const btn = document.getElementById("submit");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const password = document.getElementById("password").value;
+  btn.disabled = true;
+  note.className = "note";
+  note.textContent = "Проверяем пароль…";
+  try{
+    const res = await fetch("/api/club/login", {
+      method:"POST",
+      headers:{ "content-type":"application/json", accept:"application/json" },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json().catch(() => null);
+    if(!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+    window.location.href = "/club";
+  }catch(err){
+    note.className = "note err";
+    note.textContent = err.message;
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
