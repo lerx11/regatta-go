@@ -60,6 +60,8 @@ main{padding-block:clamp(20px,4vw,36px) 60px}
   border:1px solid rgba(255,141,94,.4);color:#ffb28c;
 }
 .badge.live{border-color:rgba(53,209,196,.45);color:var(--teal)}
+.badge.finished{border-color:rgba(133,164,187,.35);color:var(--muted)}
+.badge.closed{border-color:rgba(255,93,108,.45);color:#ff9aa4}
 .detail{
   margin-top:22px;padding:clamp(18px,3vw,26px);border:1px solid var(--line);
   border-radius:var(--radius);background:rgba(6,26,43,.5);
@@ -133,8 +135,9 @@ function tripButton(t){
   el.type = "button";
   el.className = "trip";
   el.dataset.id = t.id;
-  const badge = t.started
-    ? '<span class="badge live">идёт</span>'
+  const badgeLabels = { live: "Идёт", finished: "Завершён", closed: "Запись закрыта" };
+  const badge = badgeLabels[t.status]
+    ? '<span class="badge ' + t.status + '">' + badgeLabels[t.status] + "</span>"
     : "";
   el.innerHTML =
     '<div class="trip-top"><span class="trip-title"></span><span class="trip-when"></span></div>' +

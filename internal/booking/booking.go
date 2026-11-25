@@ -20,9 +20,10 @@ import (
 // Trip — заранее подготовленный выход на воду.
 type Trip struct {
 	ID       string `json:"id"`
-	Date     string `json:"date"`  // 2026-11-22
-	Label    string `json:"label"` // «сб, 22 ноября»
-	Time     string `json:"time"`  // 10:00
+	Date     string `json:"date"`          // 2026-11-22
+	Label    string `json:"label"`         // «сб, 22 ноября»
+	Time     string `json:"time"`          // 10:00
+	End      string `json:"end,omitempty"` // 13:00, если время окончания известно
 	Spot     string `json:"spot"`
 	SpotName string `json:"spot_name"`
 	Boat     string `json:"boat"`
@@ -52,10 +53,14 @@ type BookingResult struct {
 }
 
 // ClubTrip — выход в клубном списке: вместе со статусом и числом заявок.
+//
+// Status: "" — ещё не начался, "live" — идёт, "finished" — завершён,
+// "closed" — начался, но время окончания неизвестно.
 type ClubTrip struct {
 	Trip
-	Started bool `json:"started"` // выход уже начался (запись закрыта)
-	Booked  int  `json:"booked"`
+	Started bool   `json:"started"` // время старта наступило
+	Status  string `json:"status"`
+	Booked  int    `json:"booked"`
 }
 
 // ClubTripDetail — выход и его экипаж.
@@ -221,18 +226,19 @@ type slot struct {
 	boat     string
 	capacity int
 	hour     int
+	duration time.Duration // 0 — время окончания неизвестно
 	weekday  time.Weekday
 }
 
 // Выходы повторяются раз в неделю: дата считается от дня недели, а не от
 // «сегодня + N», поэтому карточка не переезжает на следующий день в полночь.
 var slots = []slot{
-	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 10, weekday: time.Wednesday},
-	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 18, weekday: time.Wednesday},
-	{spot: "gelendzhik", boat: "МХ700", capacity: 6, hour: 11, weekday: time.Thursday},
-	{spot: "spb", boat: "Оптимист", capacity: 2, hour: 12, weekday: time.Friday},
-	{spot: "kazan", boat: "МХ700", capacity: 6, hour: 16, weekday: time.Saturday},
-	{spot: "sochi", boat: "Яхта 34 фута", capacity: 8, hour: 10, weekday: time.Monday},
+	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 10, duration: 2 * time.Hour, weekday: time.Wednesday},
+	{spot: "strogino", boat: "Лазер 4.7", capacity: 4, hour: 18, duration: 2 * time.Hour, weekday: time.Wednesday},
+	{spot: "gelendzhik", boat: "МХ700", capacity: 6, hour: 11, duration: 3 * time.Hour, weekday: time.Thursday},
+	{spot: "spb", boat: "Оптимист", capacity: 2, hour: 12, duration: 2 * time.Hour, weekday: time.Friday},
+	{spot: "kazan", boat: "МХ700", capacity: 6, hour: 16, duration: 3 * time.Hour, weekday: time.Saturday},
+	{spot: "sochi", boat: "Яхта 34 фута", capacity: 8, hour: 10, duration: 3 * time.Hour, weekday: time.Monday},
 }
 
 var moscow = func() *time.Location {
@@ -270,7 +276,7 @@ func Schedule(now time.Time) []Trip {
 // makeTrip собирает выход по времени старта и шаблону расписания.
 func makeTrip(start time.Time, s slot, sp spots.Spot) Trip {
 	start = start.In(moscow)
-	return Trip{
+	trip := Trip{
 		ID:       fmt.Sprintf("%s-%s-%02d", start.Format("2006-01-02"), sp.Slug, s.hour),
 		Date:     start.Format("2006-01-02"),
 		Label:    weekdays[start.Weekday()] + ", " + strconv.Itoa(start.Day()) + " " + months[start.Month()-1],
@@ -280,6 +286,10 @@ func makeTrip(start time.Time, s slot, sp spots.Spot) Trip {
 		Boat:     s.boat,
 		Capacity: s.capacity,
 	}
+	if s.duration > 0 {
+		trip.End = start.Add(s.duration).Format("15:04")
+	}
+	return trip
 }
 
 func sortTrips(trips []Trip) {
@@ -350,11 +360,11 @@ func (s *Service) ClubTrips(ctx context.Context) (current, next []ClubTrip, err 
 
 	current = make([]ClubTrip, len(curTrips))
 	for i, t := range curTrips {
-		current[i] = ClubTrip{Trip: t, Started: started(now, t), Booked: booked[i]}
+		current[i] = ClubTrip{Trip: t, Started: started(now, t), Status: tripStatus(now, t), Booked: booked[i]}
 	}
 	next = make([]ClubTrip, len(nextTrips))
 	for i, t := range nextTrips {
-		next[i] = ClubTrip{Trip: t, Started: started(now, t), Booked: booked[len(curTrips)+i]}
+		next[i] = ClubTrip{Trip: t, Started: started(now, t), Status: tripStatus(now, t), Booked: booked[len(curTrips)+i]}
 	}
 	return current, next, nil
 }
@@ -390,8 +400,13 @@ func (s *Service) ClubTrip(ctx context.Context, id string) (ClubTripDetail, erro
 	}
 
 	return ClubTripDetail{
-		ClubTrip: ClubTrip{Trip: *found, Started: started(now, *found), Booked: booked[0]},
-		Crew:     crew,
+		ClubTrip: ClubTrip{
+			Trip:    *found,
+			Started: started(now, *found),
+			Status:  tripStatus(now, *found),
+			Booked:  booked[0],
+		},
+		Crew: crew,
 	}, nil
 }
 
@@ -441,6 +456,29 @@ func started(now time.Time, t Trip) bool {
 		return false
 	}
 	return !start.After(now.In(moscow))
+}
+
+// tripStatus вычисляет метку выхода для клуба.
+//
+// Если время окончания известно, «Идёт» показывается только между стартом и
+// окончанием, после — «Завершён». Если окончание неизвестно, с момента старта
+// показывается «Запись закрыта». До старта метки нет.
+func tripStatus(now time.Time, t Trip) string {
+	now = now.In(moscow)
+	start, err := time.ParseInLocation("2006-01-02 15:04", t.Date+" "+t.Time, moscow)
+	if err != nil || now.Before(start) {
+		return ""
+	}
+	if t.End != "" {
+		end, err := time.ParseInLocation("2006-01-02 15:04", t.Date+" "+t.End, moscow)
+		if err == nil {
+			if now.Before(end) {
+				return "live"
+			}
+			return "finished"
+		}
+	}
+	return "closed"
 }
 
 func newID() string {

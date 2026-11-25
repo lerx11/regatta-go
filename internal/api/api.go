@@ -226,7 +226,7 @@ func (a *API) clubLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !hmac.Equal([]byte(body.Password), []byte(password)) {
-		writeError(w, http.StatusUnauthorized, "неверный пароль")
+		writeError(w, http.StatusUnauthorized, "Неверный пароль")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{

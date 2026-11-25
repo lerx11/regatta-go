@@ -260,6 +260,9 @@ func TestClubRequiresPassword(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("неверный пароль: статус = %d, ожидали 401", rec.Code)
 	}
+	if !strings.Contains(rec.Body.String(), "Неверный пароль") {
+		t.Fatalf("неверный пароль: тело = %s, ожидали «Неверный пароль»", rec.Body)
+	}
 
 	// Верный пароль выдаёт cookie, с ней данные доступны.
 	rec = httptest.NewRecorder()

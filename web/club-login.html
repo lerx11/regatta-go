@@ -75,6 +75,15 @@ const form = document.getElementById("loginForm");
 const note = document.getElementById("note");
 const btn = document.getElementById("submit");
 
+// При открытии формы и возврате из кеша браузера сообщений об ошибке нет.
+function resetForm(){
+  note.className = "note";
+  note.textContent = "";
+  btn.disabled = false;
+}
+resetForm();
+window.addEventListener("pageshow", resetForm);
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const password = document.getElementById("password").value;
@@ -88,11 +97,18 @@ form.addEventListener("submit", async (e) => {
       body: JSON.stringify({ password })
     });
     const data = await res.json().catch(() => null);
-    if(!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+    if(!res.ok){
+      note.className = "note err";
+      note.textContent = res.status === 401
+        ? "Неверный пароль"
+        : ((data && data.error) || ("HTTP " + res.status));
+      btn.disabled = false;
+      return;
+    }
     window.location.href = "/club";
   }catch(err){
     note.className = "note err";
-    note.textContent = err.message;
+    note.textContent = "Не удалось войти: " + err.message;
     btn.disabled = false;
   }
 });

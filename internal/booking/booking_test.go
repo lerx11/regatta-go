@@ -345,6 +345,24 @@ func TestClubTripsSplitByWeek(t *testing.T) {
 	if !ok || !ten.Started {
 		t.Errorf("утренний выход должен быть в текущей неделе и уже начаться: %+v", ten)
 	}
+	if ten.Status != "finished" {
+		t.Errorf("утренний выход закончился в 12:00, статус = %q", ten.Status)
+	}
+	sochiPast, ok := cur["2026-11-23-sochi-10"]
+	if !ok {
+		t.Fatal("выход Сочи 23 ноября должен быть в текущей неделе")
+	}
+	if sochiPast.Status == "live" {
+		t.Error("Сочи 23 ноября не может быть «Идёт» 25 ноября")
+	}
+	if sochiPast.Status != "finished" {
+		t.Errorf("Сочи 23 ноября: статус = %q, ожидали finished", sochiPast.Status)
+	}
+	for _, tr := range next {
+		if tr.ID == "2026-11-30-sochi-10" && tr.Status == "closed" {
+			t.Error("будущий выход 30 ноября не может быть «Запись закрыта»")
+		}
+	}
 	evening, ok := cur["2026-11-25-strogino-18"]
 	if !ok || evening.Started {
 		t.Errorf("вечерний выход в 17:59 ещё не начался: %+v", evening)
@@ -400,6 +418,33 @@ func TestClubTripOpensAfterStart(t *testing.T) {
 	}
 	if _, err := after.ClubTrip(context.Background(), "2026-11-25-strogino-10"); err != nil {
 		t.Errorf("утренний выход тоже должен открываться: %v", err)
+	}
+}
+
+func TestTripStatus(t *testing.T) {
+	at := func(hour, minute int) time.Time {
+		return time.Date(2026, 11, 25, hour, minute, 0, 0, moscow)
+	}
+	cases := []struct {
+		name string
+		now  time.Time
+		end  string
+		want string
+	}{
+		{"до старта", at(9, 59), "12:00", ""},
+		{"в момент старта", at(10, 0), "12:00", "live"},
+		{"до окончания", at(11, 59), "12:00", "live"},
+		{"в момент окончания", at(12, 0), "12:00", "finished"},
+		{"после окончания", at(13, 0), "12:00", "finished"},
+		{"без окончания до старта", at(9, 59), "", ""},
+		{"без окончания после старта", at(10, 0), "", "closed"},
+		{"без окончания на следующий день", at(23, 59), "", "closed"},
+	}
+	for _, c := range cases {
+		trip := Trip{Date: "2026-11-25", Time: "10:00", End: c.end}
+		if got := tripStatus(c.now, trip); got != c.want {
+			t.Errorf("%s: статус = %q, ожидали %q", c.name, got, c.want)
+		}
 	}
 }
 
