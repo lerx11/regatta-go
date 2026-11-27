@@ -151,6 +151,41 @@ func (u *Upstash) Crew(ctx context.Context, tripID string) ([]Member, error) {
 	return members, nil
 }
 
+// TripRecords читает сохранённые изменения расписания и созданные выходы.
+func (u *Upstash) TripRecords(ctx context.Context) ([]TripRecord, error) {
+	raw, err := u.do(ctx, "HGETALL", tripMetaKey)
+	if err != nil {
+		return nil, err
+	}
+	pairs, err := hashPairs(raw)
+	if err != nil {
+		return nil, fmt.Errorf("upstash: HGETALL: %w", err)
+	}
+	records := make([]TripRecord, 0, len(pairs))
+	for _, payload := range pairs {
+		var rec TripRecord
+		if err := json.Unmarshal([]byte(payload), &rec); err != nil {
+			continue // одна битая запись не должна ломать расписание
+		}
+		if rec.ID == "" {
+			continue
+		}
+		records = append(records, rec)
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].ID < records[j].ID })
+	return records, nil
+}
+
+// SaveTripRecord сохраняет запись выхода: перенос, отмену или новый выход.
+func (u *Upstash) SaveTripRecord(ctx context.Context, rec TripRecord) error {
+	payload, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	_, err = u.do(ctx, "HSET", tripMetaKey, rec.ID, string(payload))
+	return err
+}
+
 // hashPairs разбирает HGETALL: Upstash REST отдаёт либо плоский массив
 // [поле, значение, ...], либо объект — поддерживаем оба вида.
 func hashPairs(raw json.RawMessage) (map[string]string, error) {
@@ -237,6 +272,9 @@ func (u *Upstash) do(ctx context.Context, args ...any) (json.RawMessage, error) 
 	}
 	return out.Result, nil
 }
+
+// tripMetaKey — хеш записей: поле — ID выхода, значение — JSON TripRecord.
+const tripMetaKey = "regatta:trips:meta"
 
 func bookedKey(tripID string) string { return "regatta:trip:" + tripID + ":booked" }
 func crewKey(tripID string) string   { return "regatta:trip:" + tripID + ":crew" }

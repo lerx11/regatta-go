@@ -52,6 +52,9 @@ go vet ./...
 | `POST` | `/api/trips/{id}/book` | Запись в экипаж: JSON `{"name":"…","contact":"…"}` |
 | `GET` | `/api/club/trips` | Выходы текущей и следующей недели (нужна cookie клуба) |
 | `GET` | `/api/club/trips/{id}` | Экипаж выхода, в том числе после старта (нужна cookie клуба) |
+| `POST` | `/api/club/trips` | Создать выход: акватория, лодка, дата, начало, окончание, мест |
+| `PATCH` | `/api/club/trips/{id}` | Перенести выход или изменить вместимость |
+| `POST` | `/api/club/trips/{id}/cancel` | Отменить выход, сохранив карточку и экипаж |
 | `POST` | `/api/club/login` | Вход в клуб: JSON `{"password":"…"}` |
 | `POST` | `/api/club/logout` | Выход из клуба: сбрасывает cookie |
 | `GET` | `/api/health` | Проверка живости |

@@ -52,6 +52,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/club/logout", a.clubLogout)
 	mux.HandleFunc("GET /api/club/trips", a.clubTrips)
 	mux.HandleFunc("GET /api/club/trips/{id}", a.clubTrip)
+	mux.HandleFunc("POST /api/club/trips", a.clubCreateTrip)
+	mux.HandleFunc("PATCH /api/club/trips/{id}", a.clubUpdateTrip)
+	mux.HandleFunc("POST /api/club/trips/{id}/cancel", a.clubCancelTrip)
 }
 
 func (a *API) health(w http.ResponseWriter, _ *http.Request) {
@@ -167,6 +170,11 @@ func (a *API) bookTrip(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]string{
 				"error": "Запись закрыта. Выход уже начался",
 				"code":  "trip_started",
+			})
+		case errors.Is(err, booking.ErrTripCancelled):
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "Запись закрыта. Выход отменён",
+				"code":  "trip_cancelled",
 			})
 		case errors.Is(err, booking.ErrTripNotFound):
 			writeError(w, http.StatusNotFound, "выход не найден или уже прошёл")
@@ -295,6 +303,99 @@ func (a *API) clubTrip(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, detail)
+}
+
+// clubCreateTrip добавляет разовый выход в расписание.
+func (a *API) clubCreateTrip(w http.ResponseWriter, r *http.Request) {
+	if !requireClub(w, r) {
+		return
+	}
+	var in booking.TripInput
+	if !decodeClubBody(w, r, &in) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	trip, err := a.book.CreateTrip(ctx, in)
+	if err != nil {
+		writeTripError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusCreated, trip)
+}
+
+// clubUpdateTrip переносит выход или меняет вместимость.
+func (a *API) clubUpdateTrip(w http.ResponseWriter, r *http.Request) {
+	if !requireClub(w, r) {
+		return
+	}
+	var in booking.TripUpdate
+	if !decodeClubBody(w, r, &in) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	trip, err := a.book.UpdateTrip(ctx, r.PathValue("id"), in)
+	if err != nil {
+		writeTripError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, trip)
+}
+
+// clubCancelTrip закрывает запись, сохраняя карточку и экипаж.
+func (a *API) clubCancelTrip(w http.ResponseWriter, r *http.Request) {
+	if !requireClub(w, r) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	detail, err := a.book.CancelTrip(ctx, r.PathValue("id"))
+	if err != nil {
+		writeTripError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, detail)
+}
+
+// decodeClubBody читает JSON-тело изменения; при ошибке сам пишет 400.
+func decodeClubBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(dst); err != nil {
+		writeError(w, http.StatusBadRequest, "некорректный JSON в запросе")
+		return false
+	}
+	return true
+}
+
+// writeTripError переводит ошибки управления выходами в HTTP-коды.
+func writeTripError(w http.ResponseWriter, err error) {
+	var invalid booking.InvalidError
+	switch {
+	case errors.Is(err, booking.ErrNotConfigured):
+		writeError(w, http.StatusServiceUnavailable, "управление выходами недоступно: не настроен Upstash Redis")
+	case errors.Is(err, booking.ErrTimeConflict):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, booking.ErrAlreadyCancelled), errors.Is(err, booking.ErrTripCancelled):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, booking.ErrTripStarted):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Выход уже начался",
+			"code":  "trip_started",
+		})
+	case errors.Is(err, booking.ErrTripNotFound):
+		writeError(w, http.StatusNotFound, "выход не найден")
+	case errors.As(err, &invalid):
+		writeError(w, http.StatusBadRequest, invalid.Error())
+	default:
+		writeError(w, http.StatusBadGateway, "не удалось сохранить изменение: "+err.Error())
+	}
 }
 
 // requireClub пускает дальше только с действующей cookie клуба.

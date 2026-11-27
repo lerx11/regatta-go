@@ -17,13 +17,31 @@ import (
 
 // fakeStore — фейковый Redis: счётчики в памяти под мьютексом.
 type fakeStore struct {
-	mu     sync.Mutex
-	booked map[string]int
-	crew   map[string][]Member
+	mu      sync.Mutex
+	booked  map[string]int
+	crew    map[string][]Member
+	records map[string]TripRecord
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{booked: map[string]int{}, crew: map[string][]Member{}}
+	return &fakeStore{booked: map[string]int{}, crew: map[string][]Member{}, records: map[string]TripRecord{}}
+}
+
+func (f *fakeStore) TripRecords(context.Context) ([]TripRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]TripRecord, 0, len(f.records))
+	for _, rec := range f.records {
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) SaveTripRecord(_ context.Context, rec TripRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.records[rec.ID] = rec
+	return nil
 }
 
 func (f *fakeStore) Reserve(_ context.Context, tripID string, capacity int, participantID, payload string) (int, error) {
@@ -673,4 +691,245 @@ func TestUpstashFromEnvSourceSelection(t *testing.T) {
 			t.Fatalf("ожидали fallback на KV, получили %+v", u)
 		}
 	})
+}
+
+func findTripByID(trips []Trip, id string) (Trip, bool) {
+	for _, t := range trips {
+		if t.ID == id {
+			return t, true
+		}
+	}
+	return Trip{}, false
+}
+
+func findClubTrip(t *testing.T, current, next []ClubTrip, id string) ClubTrip {
+	t.Helper()
+	for _, list := range [][]ClubTrip{current, next} {
+		for _, ct := range list {
+			if ct.ID == id {
+				return ct
+			}
+		}
+	}
+	t.Fatalf("выход %s не найден в клубе", id)
+	return ClubTrip{}
+}
+
+// Перенос меняет только выбранный выход: ID и заявки остаются, старый слот
+// исчезает из публичного расписания, следующая неделя генерируется как обычно.
+func TestMoveGeneratedTripKeepsIDAndCrew(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(store)
+	const id = "2026-11-25-strogino-18"
+	crew := Crew{Name: "Иван", Contact: "+7 900 000-00-00"}
+
+	if _, err := svc.Reserve(context.Background(), id, crew); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+	moved, err := svc.UpdateTrip(context.Background(), id, TripUpdate{Start: "19:00", End: "21:00", Capacity: 4})
+	if err != nil {
+		t.Fatalf("UpdateTrip: %v", err)
+	}
+	if moved.ID != id || moved.Time != "19:00" || moved.End != "21:00" || moved.Booked != 1 {
+		t.Fatalf("после переноса: %+v", moved)
+	}
+
+	trips, booked, err := svc.Trips(context.Background())
+	if err != nil {
+		t.Fatalf("Trips: %v", err)
+	}
+	var seen int
+	for i, tr := range trips {
+		if tr.ID != id {
+			continue
+		}
+		seen++
+		if tr.Time != "19:00" || tr.Date != "2026-11-25" {
+			t.Errorf("перенесённый выход: %s %s", tr.Date, tr.Time)
+		}
+		if booked[i] != 1 {
+			t.Errorf("занято %d мест, ожидали 1", booked[i])
+		}
+	}
+	if seen != 1 {
+		t.Errorf("%s встречается %d раз, ожидали один", id, seen)
+	}
+	for _, tr := range trips {
+		if tr.Date == "2026-11-25" && tr.Spot == "strogino" && tr.Time == "18:00" {
+			t.Errorf("старый слот 18:00 не должен оставаться в расписании: %+v", tr)
+		}
+	}
+
+	// Следующая неделя не затронута: при наступлении следующей недели
+	// генератор снова создаёт обычный слот 18:00.
+	later := NewService(store)
+	later.SetNow(func() time.Time { return time.Date(2026, 11, 26, 8, 0, 0, 0, moscow) })
+	laterTrips, _, err := later.Trips(context.Background())
+	if err != nil {
+		t.Fatalf("Trips на следующей неделе: %v", err)
+	}
+	weekAfter, ok := findTripByID(laterTrips, "2026-12-02-strogino-18")
+	if !ok || weekAfter.Time != "18:00" {
+		t.Errorf("генератор не должен терять слот: %+v", weekAfter)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.crew[id]) != 1 {
+		t.Errorf("экипаж потерян: %v", store.crew[id])
+	}
+	if rec := store.records[id]; rec.Start != "2026-11-25 19:00" {
+		t.Errorf("запись переноса: %+v", rec)
+	}
+}
+
+func TestMoveIntoAnotherSlotConflicts(t *testing.T) {
+	svc := newTestService(newFakeStore())
+	_, err := svc.UpdateTrip(context.Background(), "2026-11-25-strogino-18",
+		TripUpdate{Start: "10:00", End: "12:00", Capacity: 4})
+	if !errors.Is(err, ErrTimeConflict) {
+		t.Fatalf("ожидали ErrTimeConflict, получили %v", err)
+	}
+}
+
+func TestUpdateCapacityBelowBooked(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(store)
+	crew := Crew{Name: "Иван", Contact: "+7 900 000-00-00"}
+	for i := 0; i < 2; i++ {
+		if _, err := svc.Reserve(context.Background(), spbTripID, crew); err != nil {
+			t.Fatalf("Reserve %d: %v", i+1, err)
+		}
+	}
+
+	_, err := svc.UpdateTrip(context.Background(), spbTripID,
+		TripUpdate{Start: "12:00", End: "14:00", Capacity: 1})
+	var invalid InvalidError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("ожидали InvalidError, получили %v", err)
+	}
+	store.mu.Lock()
+	if rec, ok := store.records[spbTripID]; ok && rec.Capacity == 1 {
+		t.Error("неудачное изменение не должно сохраняться")
+	}
+	store.mu.Unlock()
+
+	updated, err := svc.UpdateTrip(context.Background(), spbTripID,
+		TripUpdate{Start: "12:00", End: "14:00", Capacity: 3})
+	if err != nil {
+		t.Fatalf("UpdateTrip до 3 мест: %v", err)
+	}
+	if updated.Capacity != 3 || updated.Booked != 2 {
+		t.Errorf("после изменения: %+v", updated)
+	}
+}
+
+// Сценарий из требований: создать выход, записать одного, перенести, отменить.
+func TestCreateMoveCancelCustomTrip(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(store)
+
+	created, err := svc.CreateTrip(context.Background(), TripInput{
+		Spot: "sochi", Boat: "Яхта 34 фута",
+		Date: "2026-11-24", Start: "14:00", End: "17:00", Capacity: 4,
+	})
+	if err != nil {
+		t.Fatalf("CreateTrip: %v", err)
+	}
+	if created.ID == "" || created.Time != "14:00" || created.Booked != 0 || created.SpotName != "Сочи" {
+		t.Fatalf("созданный выход: %+v", created)
+	}
+
+	crew := Crew{Name: "Анна", Contact: "+7 900 123-45-67"}
+	if _, err := svc.Reserve(context.Background(), created.ID, crew); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	moved, err := svc.UpdateTrip(context.Background(), created.ID,
+		TripUpdate{Start: "15:00", End: "18:00", Capacity: 4})
+	if err != nil {
+		t.Fatalf("UpdateTrip: %v", err)
+	}
+	if moved.ID != created.ID || moved.Time != "15:00" || moved.Booked != 1 {
+		t.Fatalf("после переноса: %+v", moved)
+	}
+
+	detail, err := svc.CancelTrip(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("CancelTrip: %v", err)
+	}
+	if detail.Status != "cancelled" || detail.Booked != 1 || len(detail.Crew) != 1 {
+		t.Fatalf("отменённый выход: %+v", detail)
+	}
+
+	// Публично выхода больше нет, запись закрыта.
+	trips, _, err := svc.Trips(context.Background())
+	if err != nil {
+		t.Fatalf("Trips: %v", err)
+	}
+	if _, ok := findTripByID(trips, created.ID); ok {
+		t.Error("отменённый выход не должен попадать в публичное расписание")
+	}
+	if _, err := svc.Reserve(context.Background(), created.ID, crew); !errors.Is(err, ErrTripCancelled) {
+		t.Errorf("запись на отменённый выход: ожидали ErrTripCancelled, получили %v", err)
+	}
+
+	// В клубе карточка и экипаж сохранены.
+	current, next, err := svc.ClubTrips(context.Background())
+	if err != nil {
+		t.Fatalf("ClubTrips: %v", err)
+	}
+	card := findClubTrip(t, current, next, created.ID)
+	if card.Status != "cancelled" || card.Booked != 1 {
+		t.Errorf("карточка клуба: %+v", card)
+	}
+	if _, err := svc.CancelTrip(context.Background(), created.ID); !errors.Is(err, ErrAlreadyCancelled) {
+		t.Errorf("повторная отмена: ожидали ErrAlreadyCancelled, получили %v", err)
+	}
+}
+
+func TestCreateTripValidation(t *testing.T) {
+	svc := newTestService(newFakeStore())
+	cases := []struct {
+		name string
+		in   TripInput
+		want error
+	}{
+		{"прошлое", TripInput{Spot: "sochi", Boat: "Яхта", Date: "2026-11-19", Start: "10:00", End: "12:00", Capacity: 4}, nil},
+		{"занятый слот", TripInput{Spot: "strogino", Boat: "Лазер 4.7", Date: "2026-11-25", Start: "18:00", End: "20:00", Capacity: 4}, ErrTimeConflict},
+	}
+	for _, c := range cases {
+		_, err := svc.CreateTrip(context.Background(), c.in)
+		if c.want != nil {
+			if !errors.Is(err, c.want) {
+				t.Errorf("%s: ожидали %v, получили %v", c.name, c.want, err)
+			}
+			continue
+		}
+		var invalid InvalidError
+		if !errors.As(err, &invalid) {
+			t.Errorf("%s: ожидали InvalidError, получили %v", c.name, err)
+		}
+	}
+
+	if _, err := svc.CreateTrip(context.Background(), TripInput{
+		Spot: "atlantis", Boat: "Яхта", Date: "2026-11-24", Start: "14:00", End: "17:00", Capacity: 4,
+	}); !errors.As(err, new(InvalidError)) {
+		t.Errorf("неизвестная акватория: %v", err)
+	}
+}
+
+func TestStartedTripCannotBeChanged(t *testing.T) {
+	start := time.Date(2026, 11, 25, 18, 0, 0, 0, moscow)
+	svc := newTestService(newFakeStore())
+	svc.SetNow(func() time.Time { return start })
+	const id = "2026-11-25-strogino-18"
+
+	if _, err := svc.UpdateTrip(context.Background(), id,
+		TripUpdate{Start: "19:00", End: "21:00", Capacity: 4}); !errors.Is(err, ErrTripStarted) {
+		t.Errorf("перенос начавшегося выхода: ожидали ErrTripStarted, получили %v", err)
+	}
+	if _, err := svc.CancelTrip(context.Background(), id); !errors.Is(err, ErrTripStarted) {
+		t.Errorf("отмена начавшегося выхода: ожидали ErrTripStarted, получили %v", err)
+	}
 }

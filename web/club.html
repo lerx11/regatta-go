@@ -32,6 +32,9 @@ header{border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;back
   color:var(--muted);background:none;border:0;font:inherit;cursor:pointer;text-decoration:none;padding:0;
 }
 .head-actions a:hover,.head-actions button:hover{color:var(--cyan)}
+.head-actions .btn{padding:8px 14px}
+.head-actions .btn.primary{border:0;color:#04191c}
+.head-actions .btn.primary:hover{color:#04191c;filter:brightness(1.07)}
 main{padding-block:clamp(20px,4vw,36px) 60px}
 .status{margin-bottom:18px;font-size:13.5px;color:var(--muted);min-height:1.2em}
 .status.err{color:var(--red)}
@@ -62,6 +65,40 @@ main{padding-block:clamp(20px,4vw,36px) 60px}
 .badge.live{border-color:rgba(53,209,196,.45);color:var(--teal)}
 .badge.finished{border-color:rgba(133,164,187,.35);color:var(--muted)}
 .badge.closed{border-color:rgba(255,93,108,.45);color:#ff9aa4}
+.badge.cancelled{border-color:rgba(255,93,108,.5);color:#ff9aa4}
+.trip.cancelled{opacity:.68}
+.trip-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{
+  cursor:pointer;border-radius:10px;border:1px solid var(--line);background:rgba(11,43,65,.6);
+  color:var(--text);font:inherit;font-size:13px;padding:8px 14px;white-space:nowrap;
+  transition:border-color .2s,background .2s,filter .2s;
+}
+.btn:hover{border-color:rgba(122,231,255,.4)}
+.btn.primary{background:linear-gradient(135deg,var(--teal),#22a79c);border:0;color:#04191c;font-weight:650}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:#ff9aa4;border-color:rgba(255,93,108,.4)}
+.btn.small{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.editor{
+  margin-bottom:22px;padding:clamp(16px,3vw,24px);border:1px solid var(--line);
+  border-radius:var(--radius);background:rgba(6,26,43,.55);
+}
+.editor[hidden]{display:none}
+.editor h2{margin:0 0 14px;font-size:17px}
+.editor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.field label{
+  display:block;font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px;
+}
+.field input,.field select{
+  width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line);
+  background:rgba(4,16,28,.6);color:var(--text);font:inherit;font-size:14px;outline:none;
+}
+.field input:focus,.field select:focus{border-color:rgba(122,231,255,.5)}
+.field input:disabled,.field select:disabled{opacity:.55}
+.editor-note{min-height:1.2em;margin-top:12px;font-size:13px;color:var(--muted)}
+.editor-note.err{color:var(--red)}
+.editor-actions{display:flex;gap:10px;flex-wrap:wrap}
 .detail{
   margin-top:22px;padding:clamp(18px,3vw,26px);border:1px solid var(--line);
   border-radius:var(--radius);background:rgba(6,26,43,.5);
@@ -88,6 +125,7 @@ main{padding-block:clamp(20px,4vw,36px) 60px}
       <h1>Выходы и экипажи</h1>
     </div>
     <div class="head-actions">
+      <button type="button" id="addTrip" class="btn primary">Добавить выход</button>
       <a href="/">На сайт</a>
       <button type="button" id="logout">Выйти</button>
     </div>
@@ -96,6 +134,41 @@ main{padding-block:clamp(20px,4vw,36px) 60px}
 
 <main class="wrap">
   <div class="status" id="status">Загружаем выходы…</div>
+
+  <section class="editor" id="editor" hidden>
+    <h2 id="editorTitle">Новый выход</h2>
+    <div class="editor-grid">
+      <div class="field">
+        <label for="fSpot">Акватория</label>
+        <select id="fSpot"></select>
+      </div>
+      <div class="field">
+        <label for="fBoat">Лодка</label>
+        <input id="fBoat" maxlength="60" placeholder="Лазер 4.7" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="fDate">Дата</label>
+        <input id="fDate" type="date">
+      </div>
+      <div class="field">
+        <label for="fStart">Начало (МСК)</label>
+        <input id="fStart" type="time" value="10:00">
+      </div>
+      <div class="field">
+        <label for="fEnd">Окончание (МСК)</label>
+        <input id="fEnd" type="time" value="12:00">
+      </div>
+      <div class="field">
+        <label for="fCapacity">Мест</label>
+        <input id="fCapacity" type="number" min="1" max="50" value="4">
+      </div>
+    </div>
+    <div class="editor-note" id="editorNote"></div>
+    <div class="editor-actions">
+      <button type="button" class="btn primary" id="editorSubmit">Создать выход</button>
+      <button type="button" class="btn" id="editorClose">Отмена</button>
+    </div>
+  </section>
 
   <div class="weeks">
     <section class="week">
@@ -122,33 +195,127 @@ const MSK_TIME = new Intl.DateTimeFormat("ru-RU", {
   timeZone:"Europe/Moscow", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit", hourCycle:"h23"
 });
 
-async function api(url){
-  const res = await fetch(url, { headers:{ accept:"application/json" } });
+async function api(url, opts){
+  const res = await fetch(url, Object.assign({ headers:{ accept:"application/json" } }, opts || {}));
   if(res.status === 401){ window.location.href = "/club"; throw new Error("нужен пароль"); }
   const data = await res.json().catch(() => null);
   if(!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
   return data;
 }
 
+function mutate(url, method, body){
+  return api(url, {
+    method,
+    headers:{ accept:"application/json", "content-type":"application/json" },
+    body: JSON.stringify(body || {})
+  });
+}
+
+const statusLabels = { live:"Идёт", finished:"Завершён", closed:"Запись закрыта", cancelled:"Отменён" };
+const ESC = { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" };
+function esc(v){ return String(v == null ? "" : v).replace(/[&<>"']/g, c => ESC[c]); }
+
+let editingId = null;
+let spotsLoaded = false;
+
+// Будущий выход можно перенести или отменить; отменённые и начавшиеся — нет.
+function canEdit(t){ return !t.started && t.status !== "cancelled"; }
+
+function timeRange(t){ return t.end ? t.time + "–" + t.end : t.time; }
+
+function todayMSK(){
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone:"Europe/Moscow", year:"numeric", month:"2-digit", day:"2-digit"
+  }).format(new Date());
+}
+
+function setEditorNote(msg, isErr){
+  const note = $("#editorNote");
+  note.className = isErr ? "editor-note err" : "editor-note";
+  note.textContent = msg;
+}
+
+async function ensureSpots(){
+  if(spotsLoaded) return;
+  const data = await api("/api/spots");
+  const sel = $("#fSpot");
+  sel.innerHTML = "";
+  (data.spots || []).forEach(sp => {
+    const opt = document.createElement("option");
+    opt.value = sp.slug;
+    opt.textContent = sp.name;
+    sel.appendChild(opt);
+  });
+  spotsLoaded = true;
+}
+
+function openEditor(trip){
+  editingId = trip ? trip.id : null;
+  $("#editor").hidden = false;
+  $("#editorTitle").textContent = trip ? "Изменить выход" : "Новый выход";
+  $("#editorSubmit").textContent = trip ? "Сохранить изменения" : "Создать выход";
+  setEditorNote("", false);
+  $("#fBoat").value = trip ? trip.boat : "";
+  $("#fDate").value = trip ? trip.date : todayMSK();
+  $("#fDate").min = todayMSK();
+  $("#fStart").value = trip ? trip.time : "10:00";
+  $("#fEnd").value = trip ? (trip.end || "") : "12:00";
+  $("#fCapacity").value = trip ? trip.capacity : 4;
+  $("#fCapacity").min = trip ? Math.max(1, trip.booked) : 1;
+  ["#fSpot", "#fBoat", "#fDate"].forEach(sel => { $(sel).disabled = !!trip; });
+  ensureSpots().then(() => {
+    if(trip) $("#fSpot").value = trip.spot;
+  }).catch(err => setEditorNote("Не удалось загрузить акватории: " + err.message, true));
+  $("#editor").scrollIntoView({ behavior:"smooth", block:"start" });
+  $("#fStart").focus();
+}
+
+function closeEditor(){
+  $("#editor").hidden = true;
+  editingId = null;
+}
+
 function tripButton(t){
-  const el = document.createElement("button");
-  el.type = "button";
-  el.className = "trip";
+  const el = document.createElement("div");
+  el.className = "trip" + (t.status === "cancelled" ? " cancelled" : "");
   el.dataset.id = t.id;
-  const badgeLabels = { live: "Идёт", finished: "Завершён", closed: "Запись закрыта" };
-  const badge = badgeLabels[t.status]
-    ? '<span class="badge ' + t.status + '">' + badgeLabels[t.status] + "</span>"
+  el.tabIndex = 0;
+  el.setAttribute("role", "button");
+  const badge = statusLabels[t.status]
+    ? '<span class="badge ' + t.status + '">' + statusLabels[t.status] + "</span>"
     : "";
   el.innerHTML =
     '<div class="trip-top"><span class="trip-title"></span><span class="trip-when"></span></div>' +
     '<div class="trip-meta"><span>Заявок: <b class="n"></b></span><span class="boat"></span></div>';
-  el.querySelector(".trip-title").innerHTML = "";
   el.querySelector(".trip-title").textContent = t.spot_name;
   el.querySelector(".trip-title").insertAdjacentHTML("beforeend", badge);
-  el.querySelector(".trip-when").textContent = t.label + " · " + t.time + " МСК";
+  el.querySelector(".trip-when").textContent = t.label + " · " + timeRange(t) + " МСК";
   el.querySelector(".n").textContent = t.booked + " / " + t.capacity;
   el.querySelector(".boat").textContent = t.boat;
-  el.addEventListener("click", () => openTrip(t.id));
+
+  if(canEdit(t)){
+    const actions = document.createElement("div");
+    actions.className = "trip-actions";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "btn small";
+    edit.textContent = "Изменить";
+    edit.addEventListener("click", (e) => { e.stopPropagation(); openEditor(t); });
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn small danger";
+    cancel.textContent = "Отменить выход";
+    cancel.addEventListener("click", (e) => { e.stopPropagation(); cancelTrip(t); });
+    actions.appendChild(edit);
+    actions.appendChild(cancel);
+    el.appendChild(actions);
+  }
+
+  const open = () => openTrip(t.id);
+  el.addEventListener("click", open);
+  el.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); open(); }
+  });
   return el;
 }
 
@@ -183,9 +350,13 @@ async function openTrip(id){
     const t = await api("/api/club/trips/" + encodeURIComponent(id));
     $("#detail").hidden = false;
     $("#detailTitle").textContent = t.spot_name;
+    const detailBadge = statusLabels[t.status]
+      ? ' <span class="badge ' + t.status + '">' + statusLabels[t.status] + "</span>" : "";
     $("#detailSub").innerHTML =
-      "Дата: <b>" + t.label + "</b> · Время: <b>" + t.time + " МСК</b> · " +
-      "Лодка: <b>" + t.boat + "</b> · Заявок: <b>" + t.booked + " из " + t.capacity + "</b>";
+      "Дата: <b>" + esc(t.label) + "</b> · Время: <b>" + esc(timeRange(t)) + " МСК</b> · " +
+      "Лодка: <b>" + esc(t.boat) + "</b> · Заявок: <b>" + t.booked + " из " + t.capacity + "</b>" +
+      (t.status === "cancelled" ? ' · <b style="color:#ff9aa4">Отменён</b>' : "");
+    $("#detailTitle").insertAdjacentHTML("beforeend", detailBadge);
     const list = $("#crewList");
     list.innerHTML = "";
     if(!t.crew || !t.crew.length){
@@ -207,6 +378,60 @@ async function openTrip(id){
     status.textContent = "Не удалось открыть экипаж: " + err.message;
   }
 }
+
+async function cancelTrip(t){
+  const text = "Отменить выход " + t.spot_name + " " + t.label + " в " + t.time + "?\n\n" +
+    "Заявок: " + t.booked + ". Запись закроется, карточка и участники останутся в кабинете.";
+  if(!window.confirm(text)) return;
+
+  const status = $("#status");
+  status.className = "status";
+  status.textContent = "Отменяем выход…";
+  try{
+    await mutate("/api/club/trips/" + encodeURIComponent(t.id) + "/cancel", "POST", {});
+    await load();
+    await openTrip(t.id);
+  }catch(err){
+    status.className = "status err";
+    status.textContent = "Не удалось отменить выход: " + err.message;
+  }
+}
+
+$("#editorSubmit").addEventListener("click", async () => {
+  const btn = $("#editorSubmit");
+  const start = $("#fStart").value;
+  const end = $("#fEnd").value;
+  const capacity = Number($("#fCapacity").value);
+  if(!start){ setEditorNote("Укажите время начала", true); return; }
+  if(!Number.isFinite(capacity) || capacity < 1){ setEditorNote("Мест должно быть не меньше 1", true); return; }
+
+  btn.disabled = true;
+  setEditorNote("Сохраняем…", false);
+  try{
+    let saved;
+    if(editingId){
+      saved = await mutate("/api/club/trips/" + encodeURIComponent(editingId), "PATCH",
+        { start, end, capacity });
+    }else{
+      const spot = $("#fSpot").value;
+      const boat = $("#fBoat").value.trim();
+      const date = $("#fDate").value;
+      if(!spot || !boat || !date) throw new Error("Заполните акваторию, лодку и дату");
+      saved = await mutate("/api/club/trips", "POST", { spot, boat, date, start, end, capacity });
+    }
+    const id = saved.id;
+    closeEditor();
+    await load();
+    await openTrip(id);
+  }catch(err){
+    setEditorNote(err.message, true);
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+$("#editorClose").addEventListener("click", closeEditor);
+$("#addTrip").addEventListener("click", () => openEditor(null));
 
 $("#logout").addEventListener("click", async () => {
   await fetch("/api/club/logout", { method:"POST" }).catch(() => {});
