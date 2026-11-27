@@ -1,0 +1,120 @@
+:root{
+  --ink:#04101c; --ink-2:#061a2b; --sea:#0b2b41;
+  --teal:#35d1c4; --cyan:#7ae7ff; --red:#ff5d6c;
+  --text:#eaf4fb; --muted:#85a4bb; --line:rgba(122,231,255,.14);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --radius:18px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;min-height:100vh;color:var(--text);font-family:var(--sans);line-height:1.6;
+  background:
+    radial-gradient(120% 60% at 12% 0%,rgba(53,209,196,.13),transparent 55%),
+    radial-gradient(90% 55% at 88% 10%,rgba(122,231,255,.09),transparent 60%),
+    linear-gradient(180deg,#061c2e 0%,#04101c 55%,#020a12 100%);
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--cyan)}
+img,svg{display:block;max-width:100%}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
+p{margin:0}
+.jwrap{width:min(1080px,100%);margin-inline:auto;padding-inline:clamp(20px,5vw,48px)}
+
+/* навигация */
+.jnav{
+  position:sticky;top:0;z-index:20;border-bottom:1px solid var(--line);
+  background:rgba(4,16,28,.8);backdrop-filter:blur(14px);
+}
+.jnav-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;height:64px}
+.jlogo{display:flex;align-items:center;gap:9px;color:var(--text);font-weight:650;font-size:15px;text-decoration:none}
+.jlogo svg{width:22px;height:22px;color:var(--teal)}
+.jlinks{display:flex;gap:22px;font-size:14px}
+.jlinks a{color:var(--muted);text-decoration:none;transition:color .2s}
+.jlinks a:hover,.jlinks a.active{color:var(--text)}
+
+/* список */
+.jmain{padding-block:clamp(36px,7vw,76px) clamp(56px,8vw,96px)}
+.jhero{max-width:740px;margin-bottom:clamp(28px,5vw,48px)}
+.eyebrow{
+  display:flex;align-items:center;gap:10px;margin-bottom:16px;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);
+}
+.eyebrow::before{content:"";width:24px;height:1px;background:var(--teal);opacity:.6}
+.jhero h1{font-size:clamp(30px,5vw,50px);line-height:1.08;margin-bottom:16px}
+.jlead{color:var(--muted);font-size:clamp(15px,1.7vw,18px)}
+.jgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:16px}
+.jcard{
+  display:flex;flex-direction:column;gap:12px;padding:22px;border:1px solid var(--line);
+  border-radius:var(--radius);background:rgba(11,43,65,.38);color:var(--text);
+  text-decoration:none;transition:border-color .2s,background .2s,transform .2s;
+}
+.jcard:hover{border-color:rgba(122,231,255,.36);background:rgba(11,43,65,.62);transform:translateY(-2px)}
+.jcard-q{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--teal);line-height:1.55;
+}
+.jcard h2{font-size:20px;line-height:1.28;letter-spacing:-.01em}
+.jcard p{color:var(--muted);font-size:14px}
+.jcard-meta{margin-top:auto;padding-top:4px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* статья */
+.jarticle{max-width:760px;margin-inline:auto}
+.jback{display:inline-block;margin-bottom:24px;color:var(--muted);font-size:13.5px;text-decoration:none}
+.jback:hover{color:var(--cyan)}
+.jarticle h1{font-size:clamp(28px,4.6vw,44px);line-height:1.12;margin-bottom:26px}
+.jcontent{font-size:clamp(15.5px,1.7vw,17px);line-height:1.75;color:#dcecf7}
+.jcontent > p:first-child{font-size:1.06em;color:#f2faff}
+.jcontent h2{margin:38px 0 12px;font-size:clamp(21px,2.8vw,28px);line-height:1.22}
+.jcontent h3{margin:28px 0 10px;font-size:18px}
+.jcontent p{margin-bottom:16px}
+.jcontent ul,.jcontent ol{margin:0 0 18px;padding-left:22px}
+.jcontent li{margin-bottom:7px}
+.jcontent li::marker{color:var(--teal)}
+.jcontent a{color:var(--cyan);text-decoration:underline;text-underline-offset:3px}
+.jcontent a:hover{color:#b6f3ff}
+.jcontent strong{color:#fff;font-weight:650}
+.jcontent code{
+  font-family:var(--mono);font-size:.9em;background:rgba(122,231,255,.08);
+  padding:2px 6px;border-radius:6px;
+}
+.jcontent blockquote{
+  margin:22px 0;padding:14px 18px;border-left:2px solid var(--teal);
+  background:rgba(53,209,196,.06);color:var(--muted);border-radius:0 12px 12px 0;
+}
+.jcontent blockquote p{margin:0}
+.jcta{
+  margin-top:44px;padding:22px;border:1px solid var(--line);border-radius:var(--radius);
+  background:rgba(6,26,43,.55);
+}
+.jcta h2{font-size:18px;margin-bottom:8px}
+.jcta p{color:var(--muted);font-size:14px;margin-bottom:14px}
+.jcta-links{display:flex;gap:10px;flex-wrap:wrap}
+.jcta-links a{
+  padding:8px 14px;border:1px solid var(--line);border-radius:10px;
+  color:var(--text);font-size:13.5px;text-decoration:none;transition:border-color .2s;
+}
+.jcta-links a:hover{border-color:rgba(122,231,255,.45)}
+
+/* подвал */
+.jfoot{border-top:1px solid var(--line);padding-block:28px;color:var(--muted);font-size:13px}
+.jfoot .jwrap{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.jfoot a{color:var(--muted);text-decoration:none}
+.jfoot a:hover{color:var(--cyan)}
+
+@media(max-width:600px){
+  .jlinks{gap:14px;font-size:13px}
+  .jlogo{font-size:14px;white-space:nowrap}
+  .jcard{padding:18px}
+  .jarticle h1{margin-bottom:20px}
+  .jcontent h2{margin-top:30px}
+  .jfoot .jwrap{justify-content:flex-start}
+}
+
+/* Узкие телефоны: бренд и ссылки не влезают в одну строку — переносим ссылки вниз. */
+@media(max-width:440px){
+  .jnav-inner{height:auto;flex-wrap:wrap;row-gap:2px;padding-block:10px}
+  .jlinks{width:100%;gap:18px}
+}

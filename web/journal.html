@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Журнал — Ветер у марины</title>
+<meta name="description" content="Практические статьи для первого выхода под парусом: как читать прогноз ветра, что уточнить до записи в Строгино и что надеть на тренировку.">
+<meta name="theme-color" content="#04101c">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛵</text></svg>">
+<link rel="canonical" href="https://regatta-go.vercel.app/journal">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ветер у марины">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="Журнал — Ветер у марины">
+<meta property="og:description" content="Как читать прогноз ветра, что уточнить до записи и что надеть на первую парусную тренировку.">
+<meta property="og:url" content="https://regatta-go.vercel.app/journal">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Журнал — Ветер у марины">
+<meta name="twitter:description" content="Практические статьи перед первым выходом под парусом.">
+<link rel="stylesheet" href="/journal.css">
+</head>
+<body>
+<header class="jnav">
+  <div class="jwrap jnav-inner">
+    <a class="jlogo" href="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v15"/><path d="M12 4l7 9h-7z" fill="currentColor" stroke="none" opacity=".9"/><path d="M5 18h14l-2 3H7z" fill="currentColor" stroke="none" opacity=".75"/>
+      </svg>
+      <span>Ветер у марины</span>
+    </a>
+    <nav class="jlinks">
+      <a href="/journal" class="active">Журнал</a>
+      <a href="/#forecast">Прогноз</a>
+      <a href="/#trips">Выходы</a>
+    </nav>
+  </div>
+</header>
+
+<main class="jwrap jmain">
+  <section class="jhero">
+    <div class="eyebrow">Журнал</div>
+    <h1>Разобраться перед первым выходом</h1>
+    <p class="jlead">Три материала о прогнозе, выборе слота и одежде на воде. Без обещаний и общих слов — только то, что можно проверить и обсудить с инструктором.</p>
+  </section>
+
+  <section class="jgrid">
+    {{range .Articles}}
+    <a class="jcard" href="{{.Path}}">
+      <div class="jcard-q">{{.Question}}</div>
+      <h2>{{.Title}}</h2>
+      <p>{{.Description}}</p>
+      <div class="jcard-meta">{{.DateLabel}} · {{.Reading}} мин</div>
+    </a>
+    {{end}}
+  </section>
+</main>
+
+<footer class="jfoot">
+  <div class="jwrap">
+    <span>Ветер у марины — прогноз и выходы под парусом. Данные: Open-Meteo.</span>
+    <span><a href="/">На сайт</a> · <a href="/#trips">Расписание</a></span>
+  </div>
+</footer>
+</body>
+</html>

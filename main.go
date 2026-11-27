@@ -7,6 +7,9 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
+	"encoding/xml"
+	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/lerx11/marina-wind/internal/api"
 	"github.com/lerx11/marina-wind/internal/booking"
+	"github.com/lerx11/marina-wind/internal/journal"
 	"github.com/lerx11/marina-wind/internal/meteo"
 	"github.com/lerx11/marina-wind/internal/notify"
 )
@@ -74,7 +78,45 @@ func main() {
 		http.Redirect(w, r, "/club", http.StatusFound)
 	})
 
-	mux.Handle("GET /", http.FileServer(http.FS(static))) // лендинг
+	// Журнал: тексты статей лежат в internal/journal/articles/*.md.
+	articles := journal.All()
+	pages, err := template.ParseFS(static, "journal.html", "journal_article.html")
+	if err != nil {
+		log.Fatalf("шаблоны журнала: %v", err)
+	}
+
+	mux.HandleFunc("GET /journal", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		data := struct{ Articles []journal.Article }{Articles: articles}
+		if err := pages.ExecuteTemplate(w, "journal.html", data); err != nil {
+			log.Printf("журнал: %v", err)
+		}
+	})
+
+	mux.HandleFunc("GET /journal/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		article, ok := journal.Find(r.PathValue("slug"))
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		data := journalArticlePage{
+			Article: article,
+			Body:    template.HTML(article.BodyHTML),
+			JSONLD:  articleJSONLD(article),
+		}
+		if err := pages.ExecuteTemplate(w, "journal_article.html", data); err != nil {
+			log.Printf("статья %s: %v", article.Slug, err)
+		}
+	})
+
+	mux.HandleFunc("GET /sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		writeSitemap(w, articles)
+	})
+
+	mux.Handle("GET /", http.FileServer(http.FS(static))) // лендинг и статика
 
 	srv := &http.Server{
 		Addr:              ":" + port(),
@@ -88,6 +130,86 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("сервер остановлен: %v", err)
 	}
+}
+
+// journalArticlePage — данные шаблона статьи. Body и JSONLD уже безопасны:
+// первый собран из Markdown с экранированием, второй — из encoding/json.
+type journalArticlePage struct {
+	Article journal.Article
+	Body    template.HTML
+	JSONLD  template.JS
+}
+
+// articleJSONLD собирает разметку Article + BreadcrumbList для поисковиков.
+func articleJSONLD(a journal.Article) template.JS {
+	const org = "Ветер у марины"
+	graph := map[string]any{
+		"@context": "https://schema.org",
+		"@graph": []any{
+			map[string]any{
+				"@type":         "Article",
+				"headline":      a.H1,
+				"description":   a.Description,
+				"datePublished": a.DateISO + "T09:00:00+03:00",
+				"dateModified":  a.DateISO + "T09:00:00+03:00",
+				"inLanguage":    "ru",
+				"mainEntityOfPage": map[string]any{
+					"@type": "WebPage",
+					"@id":   a.URL,
+				},
+				"author":    map[string]any{"@type": "Organization", "name": org, "url": journal.SiteURL},
+				"publisher": map[string]any{"@type": "Organization", "name": org, "url": journal.SiteURL},
+			},
+			map[string]any{
+				"@type": "BreadcrumbList",
+				"itemListElement": []any{
+					map[string]any{"@type": "ListItem", "position": 1, "name": "Главная", "item": journal.SiteURL + "/"},
+					map[string]any{"@type": "ListItem", "position": 2, "name": "Журнал", "item": journal.SiteURL + "/journal"},
+					map[string]any{"@type": "ListItem", "position": 3, "name": a.H1, "item": a.URL},
+				},
+			},
+		},
+	}
+	body, err := json.Marshal(graph)
+	if err != nil {
+		return ""
+	}
+	return template.JS(body)
+}
+
+// writeSitemap отдаёт sitemap.xml с главной, журналом и статьями.
+func writeSitemap(w http.ResponseWriter, articles []journal.Article) {
+	type entry struct {
+		Loc     string `xml:"loc"`
+		LastMod string `xml:"lastmod,omitempty"`
+	}
+	type urlSet struct {
+		XMLName xml.Name `xml:"urlset"`
+		Xmlns   string   `xml:"xmlns,attr"`
+		URLs    []entry  `xml:"url"`
+	}
+
+	set := urlSet{
+		Xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9",
+		URLs: []entry{
+			{Loc: journal.SiteURL + "/"},
+			{Loc: journal.SiteURL + "/journal"},
+		},
+	}
+	for _, a := range articles {
+		set.URLs = append(set.URLs, entry{Loc: a.URL, LastMod: a.DateISO})
+	}
+
+	body, err := xml.MarshalIndent(set, "", "  ")
+	if err != nil {
+		http.Error(w, "не удалось собрать sitemap", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(xml.Header))
+	_, _ = w.Write(body)
+	_, _ = w.Write([]byte("\n"))
 }
 
 // port берёт PORT из окружения (обязателен на Vercel) с локальным дефолтом.

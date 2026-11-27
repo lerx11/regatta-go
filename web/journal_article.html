@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Article.Title}}</title>
+<meta name="description" content="{{.Article.Description}}">
+<meta name="theme-color" content="#04101c">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛵</text></svg>">
+<link rel="canonical" href="{{.Article.URL}}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Ветер у марины">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="{{.Article.Title}}">
+<meta property="og:description" content="{{.Article.Description}}">
+<meta property="og:url" content="{{.Article.URL}}">
+<meta property="article:published_time" content="{{.Article.DateISO}}T09:00:00+03:00">
+<meta property="article:section" content="Журнал">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.Article.Title}}">
+<meta name="twitter:description" content="{{.Article.Description}}">
+<script type="application/ld+json">{{.JSONLD}}</script>
+<link rel="stylesheet" href="/journal.css">
+</head>
+<body>
+<header class="jnav">
+  <div class="jwrap jnav-inner">
+    <a class="jlogo" href="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v15"/><path d="M12 4l7 9h-7z" fill="currentColor" stroke="none" opacity=".9"/><path d="M5 18h14l-2 3H7z" fill="currentColor" stroke="none" opacity=".75"/>
+      </svg>
+      <span>Ветер у марины</span>
+    </a>
+    <nav class="jlinks">
+      <a href="/journal" class="active">Журнал</a>
+      <a href="/#forecast">Прогноз</a>
+      <a href="/#trips">Выходы</a>
+    </nav>
+  </div>
+</header>
+
+<main class="jwrap jmain">
+  <article class="jarticle">
+    <a class="jback" href="/journal">← Журнал</a>
+    <div class="eyebrow">{{.Article.DateLabel}} · {{.Article.Reading}} мин чтения</div>
+    <h1>{{.Article.H1}}</h1>
+    <div class="jcontent">{{.Body}}</div>
+
+    <aside class="jcta">
+      <h2>Проверить перед выходом</h2>
+      <p>Почасовой прогноз, свободные места и чек-лист — на главной странице.</p>
+      <div class="jcta-links">
+        <a href="/#forecast">Прогноз</a>
+        <a href="/#trips">Расписание</a>
+        <a href="/#checklist">Чек-лист</a>
+      </div>
+    </aside>
+  </article>
+</main>
+
+<footer class="jfoot">
+  <div class="jwrap">
+    <span>Ветер у марины — прогноз и выходы под парусом. Данные: Open-Meteo.</span>
+    <span><a href="/journal">Все статьи</a> · <a href="/">На сайт</a></span>
+  </div>
+</footer>
+</body>
+</html>
